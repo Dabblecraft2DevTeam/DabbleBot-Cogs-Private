@@ -40,7 +40,7 @@ class CustomPing(commands.Cog):
         message = await ctx.send("Pinging...")
         end = time.monotonic()
         totalPing = round((end - start) * 1000, 2)
-        e = discord.Embed(title="Pinging.. :loading:", description=f"Overall Latency: {totalPing}ms")
+        e = discord.Embed(title="Pinging.. :calling:", description=f"Overall Latency: {totalPing}ms")
         await asyncio.sleep(0.25)
         try:
             await message.edit(content=None, embed=e)
@@ -48,7 +48,7 @@ class CustomPing(commands.Cog):
             return
 
         botPing = round(self.bot.latency * 1000, 2)
-        e.description = e.description + f":electric_plug: \nDiscord WebSocket Latency: {botPing}ms"
+        e.description = e.description + f"\nDiscord WebSocket Latency: {botPing}ms"
         await asyncio.sleep(0.25)
 
         averagePing = (botPing + totalPing) / 2
@@ -77,8 +77,8 @@ class CustomPing(commands.Cog):
             result = s.results.dict()
             hostPing = round(result["ping"], 2)
 
-            e.title = "Pong!"
-            e.description = e.description + f":satellite_orbital: \nHost Latency: {hostPing}ms"
+            e.title = "Pong! :satellite_orbital:"
+            e.description = e.description + f"\nHost Latency: {hostPing}ms"
             await asyncio.sleep(0.25)
             try:
                 await message.edit(embed=e)
@@ -92,7 +92,7 @@ class CustomPing(commands.Cog):
         receival_ping = round((now - ctx.message.created_at.timestamp()) * 1000, 2)
 
         e = discord.Embed(
-            title="Pinging..",
+            title="Pinging.. :calling:",
             description=f"Receival Latency: {receival_ping}ms",
         )
 
@@ -121,7 +121,7 @@ class CustomPing(commands.Cog):
             color = discord.Colour.green()
 
         e.color = color
-        e.title = "Pong!"
+        e.title = "Pong! :satellite_orbital:"
 
         await asyncio.sleep(0.25)
         try:
@@ -145,7 +145,7 @@ class CustomPing(commands.Cog):
             color = discord.Colour.orange()
         else:
             color = discord.Colour.green()
-        e = discord.Embed(color=color, title="Shard Pings", description="\n".join(description))
+        e = discord.Embed(color=color, title="Shard Pings :file_cabinet:", description="\n".join(description))
         e.set_footer(text=f"Average: {average_ping}ms")
         await ctx.send(embed=e)
 
