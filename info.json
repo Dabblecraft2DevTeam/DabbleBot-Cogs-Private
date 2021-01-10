@@ -1,0 +1,8 @@
+{
+    "author" : ["keough99"],
+    "install_msg" : "DabbleBot Private has been installed",
+    "name" : "Phen-Cogs.",
+    "short" : "DabbleBot Cogs",
+    "description" : "Contains Cogs for DabbleBot",
+    "tags" : ["utility"]
+}
