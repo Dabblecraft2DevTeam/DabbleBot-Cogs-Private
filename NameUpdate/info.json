@@ -1,0 +1,6 @@
+{
+    "author" : ["keough99"],
+    "install_msg" : "Name UpdateCog has been installed.",
+    "name" : "NameUpdate",
+    "short" : "This Cog updates the names of Voice Channels.",
+}
