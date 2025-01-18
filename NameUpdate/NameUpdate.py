@@ -1,5 +1,5 @@
 from redbot.core import commands
-from redbot.core import tasks
+from discord.ext import tasks
 import discord
 
 class NameUpdate(commands.Cog):
