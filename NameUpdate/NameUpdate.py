@@ -1,7 +1,7 @@
 from redbot.core import commands, tasks
 import discord
 
-class VoiceChannelNameUpdater(commands.Cog):
+class NameUpdate(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.channel_name_list = [
@@ -58,4 +58,4 @@ class VoiceChannelNameUpdater(commands.Cog):
         await ctx.send("Voice channel name updating started.")
 
 async def setup(bot):
-    await bot.add_cog(VoiceChannelNameUpdater(bot))
+    await bot.add_cog(NmaeUpdate(bot))
