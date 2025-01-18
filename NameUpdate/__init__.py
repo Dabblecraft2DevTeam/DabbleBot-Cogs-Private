@@ -1,4 +1,4 @@
-from .nameupdate import NameUpdate
+from .NameUpdate import NameUpdate
 
 
 async def setup(bot):
