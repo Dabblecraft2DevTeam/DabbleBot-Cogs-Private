@@ -46,6 +46,7 @@ class DateChannelCog(commands.Cog):
     async def start_date_update(self, ctx):
         """Manually trigger the first update of the voice channel."""
         await self.channel_update()
+        await ctx.send("Date update task has been started.")
 
     @commands.command()
     async def stop_date_update(self, ctx):
