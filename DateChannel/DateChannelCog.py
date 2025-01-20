@@ -22,12 +22,13 @@ class DateChannelCog(commands.Cog):
 
         # Loop through all the guilds the bot is in
         for guild in self.bot.guilds:
-            channel = discord.utils.get(guild.voice_channels, name="date-channel")  # Replace with your channel name or condition
+            # Placeholder condition: look for a channel starting with 'date-'
+            channel = discord.utils.get(guild.voice_channels, name=lambda name: name and name.endswith("date-channel"))
 
             if channel:
                 try:
-                    await channel.edit(name=date_str)
-                    print(f"Updated channel {channel.name} to {date_str} in guild {guild.name}")
+                    await channel.edit(name=f"date-{date_str}")  # Prefix the date with 'date-'
+                    print(f"Updated channel {channel.name} to date-{date_str} in guild {guild.name}")
                 except discord.Forbidden:
                     print(f"Bot does not have permission to edit the channel in guild {guild.name}.")
                 except discord.HTTPException as e:
