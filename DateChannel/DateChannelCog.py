@@ -5,7 +5,7 @@ import datetime
 import asyncio
 
 class DateChannelCog(commands.Cog):
-    """Cog that updates a voice channel name with the current date."""
+    """Cog that updates a voice channel name with the current date in all guilds."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -16,25 +16,23 @@ class DateChannelCog(commands.Cog):
 
     @tasks.loop(hours=24)
     async def channel_update(self):
-        """Background task to update the voice channel name every day."""
+        """Background task to update the voice channel name every day in all guilds."""
         now = datetime.datetime.now()
         date_str = now.strftime("%m/%d/%Y")  # Format as MM/DD/YYYY
 
-        guild = self.bot.get_guild(123456789012345678)  # Replace with your guild ID
-        if not guild:
-            return
+        # Loop through all the guilds the bot is in
+        for guild in self.bot.guilds:
+            channel = discord.utils.get(guild.voice_channels, name="date-channel")  # Replace with your channel name or condition
 
-        channel = discord.utils.get(guild.voice_channels, name="date-channel")  # Replace with your channel name or condition
+            if channel:
+                try:
+                    await channel.edit(name=date_str)
+                    print(f"Updated channel {channel.name} to {date_str} in guild {guild.name}")
+                except discord.Forbidden:
+                    print(f"Bot does not have permission to edit the channel in guild {guild.name}.")
+                except discord.HTTPException as e:
+                    print(f"Failed to update channel name in guild {guild.name}: {e}")
 
-        if channel:
-            try:
-                await channel.edit(name=date_str)
-                print(f"Updated channel {channel.name} to {date_str}")
-            except discord.Forbidden:
-                print("Bot does not have permission to edit the channel.")
-            except discord.HTTPException as e:
-                print(f"Failed to update channel name: {e}")
-    
     @channel_update.before_loop
     async def before_channel_update(self):
         """Wait until midnight to run the task for the first time."""
