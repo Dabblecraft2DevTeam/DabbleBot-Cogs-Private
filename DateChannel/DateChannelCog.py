@@ -29,7 +29,7 @@ class DateChannelCog(commands.Cog):
                 try:
                     # Update the channel name with the current date
                     await channel.edit(name=f"\u0001F4C6\uFF5C{date_str}")
-                    print(f"Updated channel {channel.name} to \u0001F4C6\uFF5C{date_str} in guild {guild.name}")
+                    print(f"Updated channel {channel.name} to \uD83D\uDCC5\uFF5C{date_str} in guild {guild.name}")
                 except discord.Forbidden:
                     print(f"Bot does not have permission to edit the channel in guild {guild.name}.")
                 except discord.HTTPException as e:
