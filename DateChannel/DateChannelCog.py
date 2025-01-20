@@ -25,6 +25,18 @@ class DateChannelCog(commands.Cog):
             # Look for a channel with a specific name, or create one if it doesn't exist
             channel = discord.utils.get(guild.voice_channels, name="date-channel")
 
+            if channel:
+                try:
+                    # Update the channel name with the current date
+                    await channel.edit(name=f"date-{date_str}")
+                    print(f"Updated channel {channel.name} to date-{date_str} in guild {guild.name}")
+                except discord.Forbidden:
+                    print(f"Bot does not have permission to edit the channel in guild {guild.name}.")
+                except discord.HTTPException as e:
+                    print(f"Failed to update channel name in guild {guild.name}: {e}")
+            else:
+                print(f"No 'date-channel' found in guild {guild.name}. Skipping update.")
+
     @channel_update.before_loop
     async def before_channel_update(self):
         """Wait until midnight to run the task for the first time."""
