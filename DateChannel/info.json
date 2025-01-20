@@ -1,0 +1,6 @@
+{
+    "author" : ["keough99"],
+    "install_msg" : "DateChannel has been installed.",
+    "name" : "DateChannel",
+    "short" : "This Cog dynamically renames a voice channel to match the current date in MM/DD/YYYY format.",
+}
