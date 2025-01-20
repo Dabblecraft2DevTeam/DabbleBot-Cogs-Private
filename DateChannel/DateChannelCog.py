@@ -23,7 +23,7 @@ class DateChannelCog(commands.Cog):
         # Loop through all the guilds the bot is in
         for guild in self.bot.guilds:
             # Placeholder condition: look for a channel starting with 'date-'
-            channel = discord.utils.get(guild.voice_channels, name=lambda name: name and name.endswith("{date}"))
+            channel = discord.utils.get(guild.voice_channels, name=lambda name: name and name.endswith("date-"))
 
             if channel:
                 try:
