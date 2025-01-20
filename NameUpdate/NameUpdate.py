@@ -21,7 +21,7 @@ class NameUpdate(commands.Cog):
             self.voice_channel = await guild.create_voice_channel(self.channel_name_list[self.current_name_index])
         print(f"Voice Channel '{self.voice_channel.name}' is ready.")
 
-    @tasks.loop(minutes=1)  # Update every 5 minutes (can be adjusted)
+    @tasks.loop(minutes=5)  # Update every 5 minutes (can be adjusted)
     async def update_name(self):
         if self.voice_channel:
             self.current_name_index = (self.current_name_index + 1) % len(self.channel_name_list)
