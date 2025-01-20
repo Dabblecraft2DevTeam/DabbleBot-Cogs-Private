@@ -22,17 +22,8 @@ class DateChannelCog(commands.Cog):
 
         # Loop through all the guilds the bot is in
         for guild in self.bot.guilds:
-            # Placeholder condition: look for a channel starting with 'date-'
-            channel = discord.utils.get(guild.voice_channels, name=lambda name: name and name.endswith("date-"))
-
-            if channel:
-                try:
-                    await channel.edit(name=f"date-{date_str}")  # Prefix the date with 'date-'
-                    print(f"Updated channel {channel.name} to date-{date_str} in guild {guild.name}")
-                except discord.Forbidden:
-                    print(f"Bot does not have permission to edit the channel in guild {guild.name}.")
-                except discord.HTTPException as e:
-                    print(f"Failed to update channel name in guild {guild.name}: {e}")
+            # Look for a channel with a specific name, or create one if it doesn't exist
+            channel = discord.utils.get(guild.voice_channels, name="date-channel")
 
     @channel_update.before_loop
     async def before_channel_update(self):
@@ -41,6 +32,24 @@ class DateChannelCog(commands.Cog):
         next_midnight = datetime.datetime.combine(now.date(), datetime.time(0, 0)) + datetime.timedelta(days=1)
         wait_time = (next_midnight - now).total_seconds()
         await asyncio.sleep(wait_time)  # Sleep until midnight
+
+    @commands.command()
+    async def create_date_channel(self, ctx):
+        """Create a 'date-channel' if it does not exist in the current guild."""
+        guild = ctx.guild
+        existing_channel = discord.utils.get(guild.voice_channels, name="date-channel")
+
+        if existing_channel:
+            await ctx.send("A channel named 'date-channel' already exists.")
+        else:
+            # Create the channel if it doesn't exist
+            try:
+                new_channel = await guild.create_voice_channel("date-channel")
+                await ctx.send(f"Created new voice channel: {new_channel.name}")
+            except discord.Forbidden:
+                await ctx.send("I do not have permission to create a channel in this guild.")
+            except discord.HTTPException as e:
+                await ctx.send(f"Failed to create channel: {e}")
 
     @commands.command()
     async def start_date_update(self, ctx):
