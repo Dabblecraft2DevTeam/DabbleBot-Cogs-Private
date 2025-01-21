@@ -41,7 +41,7 @@ class DateChannelCog(commands.Cog):
     async def before_channel_update(self):
         """Wait until midnight to run the task for the first time."""
         now = datetime.datetime.now()
-        next_midnight = datetime.datetime.combine(now.date(), datetime.time(0, 0)) + datetime.timedelta(days=1)
+        next_midnight = datetime.datetime.combine(now.date(), datetime.time(0, 0)) + datetime.timedelta(hours=6)
         wait_time = (next_midnight - now).total_seconds()
         await asyncio.sleep(wait_time)  # Sleep until midnight
 
