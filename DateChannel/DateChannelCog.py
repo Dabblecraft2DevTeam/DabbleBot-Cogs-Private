@@ -14,9 +14,9 @@ class DateChannelCog(commands.Cog):
     def cog_unload(self):
         self.channel_update.cancel()  # Ensure task stops when cog is unloaded
 
-    @tasks.loop(hours=24)
+    @tasks.loop(hours=6)
     async def channel_update(self):
-        """Background task to update the voice channel name every day in all guilds."""
+        """Background task to update the voice channel name every 6 hours in all guilds."""
         now = datetime.datetime.now()
         date_str = now.strftime("%m/%d/%Y")  # Format as MM/DD/YYYY
 
@@ -39,11 +39,11 @@ class DateChannelCog(commands.Cog):
 
     @channel_update.before_loop
     async def before_channel_update(self):
-        """Wait until midnight to run the task for the first time."""
+        """Wait until the next 6-hour interval to run the task for the first time."""
         now = datetime.datetime.now()
-        next_midnight = datetime.datetime.combine(now.date(), datetime.time(0, 0)) + datetime.timedelta(hours=6)
-        wait_time = (next_midnight - now).total_seconds()
-        await asyncio.sleep(wait_time)  # Sleep until midnight
+        next_interval = (now + datetime.timedelta(hours=6)).replace(minute=0, second=0, microsecond=0)
+        wait_time = (next_interval - now).total_seconds()
+        await asyncio.sleep(wait_time)  # Sleep until the next 6-hour interval
 
     @commands.command()
     async def create_date_channel(self, ctx):
