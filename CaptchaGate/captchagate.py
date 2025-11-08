@@ -271,7 +271,7 @@ class CaptchaGate(commands.Cog):
     # --- Background Task (Timeout Kick) ---
     # ----------------------------------------------------------------
 
-    @commands.loop(seconds=60) # Check every 60 seconds
+    @tasks.loop(seconds=60) # Check every 60 seconds
     async def kick_timed_out_users(self):
         """Checks active CAPTCHAs and kicks users who have timed out."""
         # We need a copy of the keys because we will be modifying the dictionary during iteration
