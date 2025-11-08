@@ -1,0 +1,11 @@
+{
+  "name": "CaptchaGate",
+  "author": ["keough99, Dabblecraft Dev Team"],
+  "description": "A CAPTCHA system to verify new members with configurable image challenges, roles, and kick limits.",
+  "install_msg": "Thanks for installing CaptchaGate! Use [p]captchaset to begin configuration.",
+  "short": "Captcha verification for new members.",
+  "tags": ["captcha", "verification", "security"],
+  "end_user_data_statement": "This cog stores Discord User IDs, Channel IDs, and Role IDs for configuration and in-memory tracking of active CAPTCHA attempts. This data is not shared.",
+  "min_bot_version": "3.5.0",
+  "max_bot_version": "3.9.9"
+}
