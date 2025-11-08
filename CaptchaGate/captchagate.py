@@ -10,11 +10,15 @@ from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import humanize_list
 from redbot.core.utils.menus import DEFAULT_CONTROLS, menu
 
+# Define the possible verification modes
+VERIFICATION_MODES = Literal["PUBLIC", "DM", "PRIVATE_CHANNEL"]
+
 # --- View for the Captcha Options ---
 
 class CaptchaView(discord.ui.View):
     """
     A custom Discord View to handle the multiple-choice CAPTCHA buttons.
+    Uses interaction_check to ensure only the target user can interact.
     """
     def __init__(self, cog, member: discord.Member, correct_answer: str, timeout: int, options: list[str]):
         super().__init__(timeout=timeout)
@@ -32,15 +36,13 @@ class CaptchaView(discord.ui.View):
         for option in options:
             button = discord.ui.Button(label=option, style=discord.ButtonStyle.secondary)
             
-            # Use lambda to correctly capture the current option for each button
             button.callback = lambda interaction, label=option: self.process_answer(interaction, label)
             self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """FIX: Only allows the target member to interact with the buttons."""
+        """Only allows the target member to interact with the buttons."""
         if interaction.user == self.member:
             return True
-        
         await interaction.response.send_message("🚫 This CAPTCHA is not for you. You must wait for your own verification.", ephemeral=True)
         return False
 
@@ -57,13 +59,14 @@ class CaptchaView(discord.ui.View):
         self.stop()
         for item in self.children:
             item.disabled = True
-        await interaction.message.edit(view=self)
+        if interaction.message:
+            await interaction.message.edit(view=self)
         
         is_correct = user_answer == self.correct_answer
 
         if is_correct:
             await interaction.response.send_message("✅ **Success!** You passed the CAPTCHA.", ephemeral=True)
-            await self.cog.grant_role_and_cleanup(self.member, self.message) 
+            await self.cog.grant_role_and_cleanup(self.member) 
         else:
             await interaction.response.send_message("❌ **Incorrect!** Please try again.", ephemeral=True)
             await self.cog.handle_failed_attempt(self.member)
@@ -75,12 +78,11 @@ class CaptchaView(discord.ui.View):
 
 class CaptchaGate(commands.Cog):
     """
-    A CAPTCHA system to verify new members and prevent bot entry.
+    A CAPTCHA system to verify new members with multiple delivery options.
     """
 
     def __init__(self, bot: Red):
         self.bot = bot
-        
         self.config = Config.get_conf(self, identifier=14092025, force_registration=True)
         
         default_guild = {
@@ -91,11 +93,13 @@ class CaptchaGate(commands.Cog):
             "max_attempts": 3,
             "challenges": {}, 
             "welcome_embed_title": "👋 Welcome New Member!", 
-            "welcome_embed_desc": "Please wait a moment while we prepare your verification test...", 
+            "welcome_embed_desc": "Please wait a moment while we prepare your verification test...",
+            "verification_mode": "PUBLIC", 
         }
         
         self.config.register_guild(**default_guild)
         
+        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int}}
         self.active_captchas = {} 
         self.kick_task = self.kick_timed_out_users.start()
 
@@ -118,8 +122,54 @@ class CaptchaGate(commands.Cog):
                 except discord.Forbidden:
                     pass 
 
-    async def grant_role_and_cleanup(self, member: discord.Member, message: Optional[discord.Message] = None):
-        """Grants the success role and cleans up the CAPTCHA message."""
+    async def _delete_channel_messages(self, guild: discord.Guild, channel: discord.TextChannel, member_data: dict):
+        """Helper to delete public CAPTCHA messages and welcome messages."""
+        message_keys = ["message_id", "public_message_id"]
+
+        for key in message_keys:
+            message_id = member_data.get(key)
+            if message_id:
+                try:
+                    message = await channel.fetch_message(message_id)
+                    await message.delete()
+                except Exception:
+                    pass 
+
+    async def _delete_private_channel(self, member: discord.Member, channel_id: Optional[int]):
+        """Helper to safely delete the private verification channel."""
+        if not channel_id:
+            return
+        channel = member.guild.get_channel(channel_id)
+        if channel:
+            try:
+                await channel.delete(reason="CaptchaGate verification complete/failed.")
+            except Exception:
+                await self.log_action(f"⚠️ Failed to delete private channel for {member.name}.", member.guild)
+    
+    async def _cleanup_messages_or_channel(self, member: discord.Member):
+        """Handles cleanup based on the verification mode."""
+        guild_settings = await self.config.guild(member.guild).all()
+        mode = guild_settings["verification_mode"]
+        member_data = self.active_captchas.get(member.id)
+        
+        if not member_data: return
+
+        if mode == "PUBLIC":
+            channel_id = guild_settings["captcha_channel"]
+            channel = member.guild.get_channel(channel_id)
+            if channel:
+                await self._delete_channel_messages(member.guild, channel, member_data)
+
+        elif mode == "PRIVATE_CHANNEL":
+            await self._delete_private_channel(member, member_data.get("channel_id"))
+        
+        # DM mode requires no message cleanup
+
+        self.active_captchas.pop(member.id, None)
+
+
+    async def grant_role_and_cleanup(self, member: discord.Member):
+        """Grants the success role and cleans up resources."""
         guild_settings = await self.config.guild(member.guild).all()
         role_id = guild_settings["success_role"]
         
@@ -129,26 +179,18 @@ class CaptchaGate(commands.Cog):
             if role and role < member.guild.me.top_role:
                 try:
                     await member.add_roles(role, reason="Passed CaptchaGate verification.")
-                    await self.log_action(f"✅ {member.name} ({member.id}) passed the CAPTCHA and was granted role `{role.name}`.", member.guild)
+                    await self.log_action(f"✅ {member.name} passed the CAPTCHA.", member.guild)
                 except Exception:
                     await self.log_action(f"⚠️ Error granting role to {member.name}.", member.guild)
             else:
                 await self.log_action(f"⚠️ Success role not set or bot can't assign it.", member.guild)
 
-        # Message Deletion (Cleanup)
-        if message:
-            try:
-                await message.delete() 
-            except Exception:
-                pass
-                
-        self.active_captchas.pop(member.id, None)
+        await self._cleanup_messages_or_channel(member)
 
 
     async def handle_failed_attempt(self, member: discord.Member):
         """Increments fail count and kicks user if max attempts are reached."""
-        if member.id not in self.active_captchas:
-            return
+        if member.id not in self.active_captchas: return
             
         guild_settings = await self.config.guild(member.guild).all()
         max_attempts = guild_settings["max_attempts"]
@@ -159,12 +201,12 @@ class CaptchaGate(commands.Cog):
             await self._kick_user(member, f"Exceeded maximum CAPTCHA attempts ({max_attempts}).")
         else:
             remaining = max_attempts - current_attempts
-            await self.log_action(f"❌ {member.name} ({member.id}) failed attempt {current_attempts}/{max_attempts}. Remaining: {remaining}.", member.guild)
+            await self.log_action(f"❌ {member.name} failed attempt {current_attempts}/{max_attempts}.", member.guild)
             await self._send_captcha(member)
 
 
     async def _kick_user(self, member: discord.Member, reason: str):
-        """Internal function to handle kicking a user."""
+        """Handles kicking a user and cleaning up resources."""
         try:
             await member.send(f"You have been kicked from **{member.guild.name}** because you failed to complete the CAPTCHA. Reason: `{reason}`")
         except discord.Forbidden:
@@ -172,61 +214,36 @@ class CaptchaGate(commands.Cog):
             
         try:
             await member.kick(reason=f"CaptchaGate Kick: {reason}")
-            await self.log_action(f"🔨 Kicked {member.name} ({member.id}). Reason: {reason}", member.guild)
+            await self.log_action(f"🔨 Kicked {member.name}. Reason: {reason}", member.guild)
         except Exception:
-            await self.log_action(f"⚠️ Failed to kick {member.name}. Bot lacks permissions.", member.guild)
-
-        self.active_captchas.pop(member.id, None)
+            await self.log_action(f"⚠️ Failed to kick {member.name}.", member.guild)
+        
+        await self._cleanup_messages_or_channel(member)
 
 
     async def _send_captcha(self, member: discord.Member):
-        """Sends a public welcome embed and then the CAPTCHA as a secured reply."""
+        """Sends the CAPTCHA based on the configured mode."""
         guild_settings = await self.config.guild(member.guild).all()
         challenges = guild_settings["challenges"]
-        channel_id = guild_settings["captcha_channel"]
         kick_timeout = guild_settings["kick_timeout"]
+        mode = guild_settings["verification_mode"]
         
-        if not challenges or not channel_id:
+        if not challenges:
+            await self.log_action(f"⚠️ No challenges configured for {member.name}.", member.guild)
             return
 
-        captcha_channel = member.guild.get_channel(channel_id)
-        if not captcha_channel:
-            return
-
-        # --- FIX: Delete previous CAPTCHA reply message on retry ---
-        member_data = self.active_captchas.get(member.id)
-        if member_data and member_data.get("message_id"):
-            try:
-                old_message = await captcha_channel.fetch_message(member_data["message_id"])
-                await old_message.delete()
-            except Exception:
-                pass 
-        
-        # 1. SEND PUBLIC WELCOME MESSAGE
-        welcome_embed = discord.Embed(
-            title=guild_settings["welcome_embed_title"].replace("{user}", member.name),
-            description=guild_settings["welcome_embed_desc"].replace("{user}", member.name),
-            color=await self.bot.get_embed_color(member)
-        )
-        
-        try:
-            public_message = await captcha_channel.send(member.mention, embed=welcome_embed)
-        except discord.Forbidden:
-            await self.log_action(f"⚠️ Failed to send public welcome message.", member.guild)
-            return
-
-        # 2. SELECT RANDOM CAPTCHA AND SEND SECURED REPLY
-        
+        # 1. Prepare CAPTCHA data
         challenge = random.choice(list(challenges.values()))
         image_url = challenge["image_url"]
         options = challenge["options"]
         correct_option = challenge["correct_option"]
         
+        # Prepare attempts for the embed
         attempts_data = self.active_captchas.get(member.id, {"attempts": 0})
         attempts_remaining = guild_settings['max_attempts'] - attempts_data['attempts']
 
+        # Prepare View and Embed
         view = CaptchaView(self, member, correct_option, kick_timeout, options)
-
         captcha_embed = discord.Embed(
             title=f"Verification Test for {member.name}",
             description=(
@@ -236,22 +253,82 @@ class CaptchaGate(commands.Cog):
             ),
             color=await self.bot.get_embed_color(member)
         )
-        if image_url:
-            captcha_embed.set_image(url=image_url)
+        if image_url: captcha_embed.set_image(url=image_url)
 
-        try:
+
+        # 2. Mode-Specific Delivery Logic
+        
+        # --- A. PUBLIC Mode (Visible, secured by interaction_check) ---
+        if mode == "PUBLIC":
+            channel_id = guild_settings["captcha_channel"]
+            channel = member.guild.get_channel(channel_id)
+            if not channel: return
+            
+            # Clean up old messages first (Handles retries)
+            await self._delete_channel_messages(member.guild, channel, self.active_captchas[member.id])
+
+            # Send Public Welcome Message
+            welcome_embed = discord.Embed(
+                title=guild_settings["welcome_embed_title"],
+                description=guild_settings["welcome_embed_desc"],
+                color=await self.bot.get_embed_color(member)
+            )
+            public_message = await channel.send(member.mention, embed=welcome_embed)
+            
+            # Send CAPTCHA as a secured reply
             captcha_message = await public_message.reply(
                 f"**Verification Required:** {member.mention}", 
                 embed=captcha_embed, 
                 view=view,
                 mention_author=False
             )
-            
             view.message = captcha_message 
+            self.active_captchas[member.id]["public_message_id"] = public_message.id 
             self.active_captchas[member.id]["message_id"] = captcha_message.id 
+
+        # --- B. DM Mode (Private, requires no cleanup) ---
+        elif mode == "DM":
+            try:
+                # Send CAPTCHA message directly to the user's DM
+                message = await member.send(content="Please complete the CAPTCHA below!", embed=captcha_embed, view=view)
+                view.message = message # For on_timeout disable
+            except discord.Forbidden:
+                await self.log_action(f"❌ Failed to send CAPTCHA to DM for {member.name}. DMs are blocked.", member.guild)
+                await self._kick_user(member, "DMs blocked. Cannot complete verification.")
+
+        # --- C. PRIVATE_CHANNEL Mode (Truly private, requires channel creation/deletion) ---
+        elif mode == "PRIVATE_CHANNEL":
+            base_channel_id = guild_settings["captcha_channel"]
+            base_channel = member.guild.get_channel(base_channel_id)
+            category = base_channel.category if base_channel else None
             
-        except discord.Forbidden:
-            await self.log_action(f"⚠️ Failed to send CAPTCHA reply. Bot lacks permissions.", member.guild)
+            # Clean up old channel first (Handles retries)
+            await self._delete_private_channel(member, self.active_captchas[member.id].get("channel_id"))
+            
+            # Create Overwrites (Deny everyone, allow user, allow bot)
+            overwrites = {
+                member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                member.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+            channel_name = f"verify-{member.name}".lower().replace(' ', '-')
+            
+            # Create Private Channel
+            private_channel = await member.guild.create_text_channel(
+                channel_name, category=category, overwrites=overwrites, reason="Captcha Verification"
+            )
+            self.active_captchas[member.id]["channel_id"] = private_channel.id
+            
+            # Send Public Welcome to guide user
+            await base_channel.send(member.mention, embed=discord.Embed(
+                title=guild_settings["welcome_embed_title"],
+                description=f"Welcome! Please head to {private_channel.mention} to complete verification.",
+                color=await self.bot.get_embed_color(member)
+            ), delete_after=kick_timeout)
+            
+            # Send CAPTCHA message to the private channel
+            captcha_message = await private_channel.send(f"**Verification Test:** {member.mention}", embed=captcha_embed, view=view)
+            view.message = captcha_message 
 
 
 # ----------------------------------------------------------------
@@ -260,25 +337,27 @@ class CaptchaGate(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        # ... (listener logic remains the same)
         if member.bot: return
-
         guild_settings = await self.config.guild(member.guild).all()
-        if not guild_settings["captcha_channel"] or not guild_settings["challenges"]:
+        
+        # Must have a channel set for any mode that uses it, and must have challenges
+        if not guild_settings["challenges"] or (guild_settings["verification_mode"] != "DM" and not guild_settings["captcha_channel"]):
             return
 
         self.active_captchas[member.id] = {
             "start_time": time.time(),
             "attempts": 0,
-            "message_id": None
+            "message_id": None, 
+            "public_message_id": None,
+            "channel_id": None, 
         }
         
-        await self.log_action(f"➡️ {member.name} ({member.id}) joined. CAPTCHA initiated.", member.guild)
+        await self.log_action(f"➡️ {member.name} joined. CAPTCHA initiated (Mode: {guild_settings['verification_mode']}).", member.guild)
         await self._send_captcha(member)
 
     @tasks.loop(seconds=60)
     async def kick_timed_out_users(self):
-        # ... (task logic remains the same)
+        """Background task to kick users who time out."""
         for user_id in list(self.active_captchas.keys()):
             data = self.active_captchas[user_id]
             start_time = data["start_time"]
@@ -297,8 +376,20 @@ class CaptchaGate(commands.Cog):
         await self.bot.wait_until_ready()
 
 # ----------------------------------------------------------------
-# --- Configuration Commands (RESTORED) ---
+# --- Configuration Commands ---
 # ----------------------------------------------------------------
+
+    def get_name_or_id(self, ctx: commands.Context, entity_id, entity_type: Literal["channel", "role"]):
+        """Helper to safely retrieve entity name or ID for settings display."""
+        if not entity_id: return "Not Set ❌"
+        
+        entity = None
+        if entity_type == "channel":
+            entity = ctx.guild.get_channel(entity_id)
+        elif entity_type == "role": 
+            entity = ctx.guild.get_role(entity_id)
+            
+        return f"{entity.mention} (`{entity_id}`)" if entity else f"ID: `{entity_id}` (Not Found)"
 
     @commands.group()
     @commands.guild_only()
@@ -308,23 +399,14 @@ class CaptchaGate(commands.Cog):
         if ctx.invoked_subcommand is None:
             settings = await self.config.guild(ctx.guild).all()
             
-            def get_name_or_id(entity_id, entity_type: Literal["channel", "role"]):
-                if not entity_id:
-                    return "Not Set ❌"
-                if entity_type == "channel":
-                    entity = ctx.guild.get_channel(entity_id)
-                else: 
-                    entity = ctx.guild.get_role(entity_id)
-                    
-                return f"{entity.mention} (`{entity_id}`)" if entity else f"ID: `{entity_id}` (Not Found)"
-
             embed = discord.Embed(
                 title="CaptchaGate Settings",
                 color=await ctx.embed_color(),
             )
-            embed.add_field(name="Captcha Channel", value=get_name_or_id(settings["captcha_channel"], "channel"), inline=False)
-            embed.add_field(name="Success Role", value=get_name_or_id(settings["success_role"], "role"), inline=False)
-            embed.add_field(name="Log Channel", value=get_name_or_id(settings["log_channel"], "channel"), inline=False)
+            embed.add_field(name="**Verification Mode**", value=f"`{settings['verification_mode']}`", inline=False)
+            embed.add_field(name="Captcha Channel", value=self.get_name_or_id(ctx, settings["captcha_channel"], "channel"), inline=False)
+            embed.add_field(name="Success Role", value=self.get_name_or_id(ctx, settings["success_role"], "role"), inline=False)
+            embed.add_field(name="Log Channel", value=self.get_name_or_id(ctx, settings["log_channel"], "channel"), inline=False)
             embed.add_field(name="Kick Timeout", value=f"`{settings['kick_timeout']}` seconds", inline=True)
             embed.add_field(name="Max Attempts", value=f"`{settings['max_attempts']}` attempts", inline=True)
             embed.add_field(name="Total Challenges", value=f"`{len(settings['challenges'])}` configured", inline=False)
@@ -334,9 +416,25 @@ class CaptchaGate(commands.Cog):
             await ctx.send(embed=embed)
 
 
+    @captchaset.command(name="mode")
+    async def captchaset_mode(self, ctx: commands.Context, mode: VERIFICATION_MODES):
+        """
+        Sets the delivery method for the CAPTCHA.
+        
+        PUBLIC: Visible in a channel (secure only by interaction_check).
+        DM: Private, sent via Direct Message (requires DMs to be open).
+        PRIVATE_CHANNEL: Creates a private channel for verification (most secure, requires 'manage channels' perm).
+        """
+        mode = mode.upper()
+        if mode != "DM" and not await self.config.guild(ctx.guild).captcha_channel():
+            return await ctx.send("❌ You must set a `captcha_channel` before using **PUBLIC** or **PRIVATE_CHANNEL** mode.")
+
+        await self.config.guild(ctx.guild).verification_mode.set(mode)
+        await ctx.send(f"✅ Verification mode set to **{mode}**.")
+        
     @captchaset.command(name="channel")
     async def captchaset_channel(self, ctx: commands.Context, channel: discord.TextChannel):
-        """Sets the channel where the CAPTCHA will be displayed."""
+        """Sets the channel where the CAPTCHA will be displayed (or used as category for private mode)."""
         await self.config.guild(ctx.guild).captcha_channel.set(channel.id)
         await ctx.send(f"✅ CAPTCHA channel set to {channel.mention}.")
 
@@ -386,7 +484,7 @@ class CaptchaGate(commands.Cog):
         await ctx.send(f"✅ Public welcome message description set.")
 
     # ----------------------------------------------------------------
-    # --- Challenge Management Commands (RESTORED) ---
+    # --- Challenge Management Commands ---
     # ----------------------------------------------------------------
 
     @captchaset.group(name="challenge")
