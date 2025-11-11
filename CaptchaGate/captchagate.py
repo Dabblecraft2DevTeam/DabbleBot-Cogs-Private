@@ -10,6 +10,9 @@ from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import humanize_list
 from redbot.core.utils.menus import DEFAULT_CONTROLS, menu
 
+# *** NEW: Import the Lockdown Mixin from the separate file ***
+from .lockdown import LockdownMixin 
+
 # Define the possible verification modes
 VERIFICATION_MODES = Literal["PUBLIC", "DM", "PRIVATE_CHANNEL"]
 
@@ -36,7 +39,7 @@ class CaptchaView(discord.ui.View):
         for option in options:
             button = discord.ui.Button(label=option, style=discord.ButtonStyle.secondary)
             
-            # Using partial for callback to pass the option label
+            # Using lambda to pass the option label
             button.callback = lambda interaction, label=option: self.process_answer(interaction, label)
             self.add_item(button)
 
@@ -119,12 +122,17 @@ class RetryView(discord.ui.View):
 
 # --- Main Cog Class ---
 
-class CaptchaGate(commands.Cog):
+# *** Inherit from LockdownMixin to include lockdown commands and logic ***
+class CaptchaGate(LockdownMixin, commands.Cog): 
     """
-    A CAPTCHA system to verify new members with multiple delivery options.
+    A CAPTCHA system to verify new members with multiple delivery options, 
+    including a raid/lockdown mode.
     """
 
     def __init__(self, bot: Red):
+        # Initialize the mixin before setting up shared resources
+        super().__init__() 
+        
         self.bot = bot
         self.config = Config.get_conf(self, identifier=14092025, force_registration=True)
         
@@ -138,12 +146,21 @@ class CaptchaGate(commands.Cog):
             "welcome_embed_title": "👋 Welcome New Member!", 
             "welcome_embed_desc": "Please wait a moment while we prepare your verification test...",
             "verification_mode": "PUBLIC", 
+            # --- Lockdown Feature Settings ---
+            "lockdown_enabled": False, 
+            "lockdown_users": {},      
+            "lockdown_message_id": None, 
         }
         
         self.config.register_guild(**default_guild)
         
-        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
+        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | ...}}
         self.active_captchas = {} 
+        
+        # Pass the main cog's functions/config to the mixin for access
+        self.log_action = self.log_action 
+        self._send_captcha = self._send_captcha
+
         self.kick_task = self.kick_timed_out_users.start()
 
     def cog_unload(self):
@@ -248,7 +265,7 @@ class CaptchaGate(commands.Cog):
             await self._kick_user(member, f"Exceeded maximum CAPTCHA attempts ({max_attempts}).")
         else:
             remaining = max_attempts - current_attempts
-            await self.log_action(f"❌ {member.name} failed attempt {current_attempts}/{max_attempts}.", member.guild)
+            await self.log_action(f"❌ {member.name} failed attempt {current_attempts}/{max_attempts}. {remaining} left.", member.guild)
             await self._send_captcha(member)
 
     async def handle_dm_retry(self, member: discord.Member, error_message: discord.Message):
@@ -258,7 +275,6 @@ class CaptchaGate(commands.Cog):
 
         # 1. Clear the error message from the channel
         try:
-            # We don't use _delete_channel_messages here as we have the message object
             await error_message.delete()
         except Exception:
             pass
@@ -310,12 +326,10 @@ class CaptchaGate(commands.Cog):
         least_used_pool = sorted_challenges[:top_n]
         
         # Select one random challenge from this smaller, weighted pool
-        # If less than N challenges exist, it just chooses from the existing pool
         selected_challenge_id, challenge = random.choice(least_used_pool)
         
         # UPDATE CONFIG: Mark the selected challenge as used now
         async with self.config.guild(member.guild).challenges() as challenges_config:
-            # Note: This updates the guild config when the challenge is chosen, not when it's completed.
             challenges_config[selected_challenge_id]["last_used"] = time.time()
         
         # Extract data from the selected challenge
@@ -423,7 +437,6 @@ class CaptchaGate(commands.Cog):
                 # Store the error message ID for cleanup 
                 self.active_captchas[member.id]["error_message_id"] = error_message.id 
                 
-                # The kick timer continues to run, but the user is given the chance to retry by using the button.
 
 
         # --- C. PRIVATE_CHANNEL Mode (Truly private, requires channel creation/deletion) ---
@@ -477,6 +490,15 @@ class CaptchaGate(commands.Cog):
         if not guild_settings["challenges"] or (guild_settings["verification_mode"] != "DM" and not guild_settings["captcha_channel"]):
             return
 
+        # --- Check for Lockdown ---
+        if guild_settings["lockdown_enabled"]:
+            async with self.config.guild(member.guild).lockdown_users() as locked_users:
+                # Queue the user. Store a timestamp as a string since JSON keys must be strings.
+                locked_users[str(member.id)] = time.time() 
+            await self.log_action(f"⏸️ {member.name} joined during lockdown. User queued.", member.guild)
+            return
+        # --- End Lockdown Check ---
+
         self.active_captchas[member.id] = {
             "start_time": time.time(),
             "attempts": 0,
@@ -510,7 +532,7 @@ class CaptchaGate(commands.Cog):
         await self.bot.wait_until_ready()
 
 # ----------------------------------------------------------------
-# --- Configuration Commands ---
+# --- Configuration Commands (Base and Settings) ---
 # ----------------------------------------------------------------
 
     def get_name_or_id(self, ctx: commands.Context, entity_id, entity_type: Literal["channel", "role"]):
@@ -546,6 +568,9 @@ class CaptchaGate(commands.Cog):
             embed.add_field(name="Total Challenges", value=f"`{len(settings['challenges'])}` configured", inline=False)
             embed.add_field(name="Welcome Title", value=f"`{settings['welcome_embed_title']}`", inline=False)
             embed.add_field(name="Welcome Description", value=f"`{settings['welcome_embed_desc'][:50]}...`", inline=False)
+            embed.add_field(name="Lockdown Enabled", value=f"**{'Yes' if settings['lockdown_enabled'] else 'No'}**", inline=True)
+            embed.add_field(name="Queued Users", value=f"`{len(settings['lockdown_users'])}`", inline=True)
+
 
             await ctx.send(embed=embed)
 
@@ -654,7 +679,6 @@ class CaptchaGate(commands.Cog):
                 "image_url": image_url,
                 "options": options_list,
                 "correct_option": correct_option,
-                # Store the current time when added. If it was never used, it's the "oldest" used one.
                 "last_used": time.time(), 
             }
 
