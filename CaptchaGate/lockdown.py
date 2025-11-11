@@ -7,7 +7,6 @@ from redbot.core.bot import Red
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    # This import is only for type hinting the main cog class if needed
     from .captchagate import CaptchaGate 
 
 # --- Lockdown Mixin Class ---
@@ -20,8 +19,7 @@ class LockdownMixin:
     
     # Placeholder __init__ for MRO and attribute type hints
     def __init__(self, *args):
-        # These are attributes defined in the main CaptchaGate class, 
-        # which this mixin needs access to.
+        # These attributes are accessed from the main CaptchaGate cog instance
         self.bot: Red
         self.config: commands.Config
         self.log_action: callable
@@ -70,9 +68,10 @@ class LockdownMixin:
 
     
     # ----------------------------------------------------------------
-    # --- Command Method (Method to be registered as a command) ---
+    # --- Command Method (DECORATED to ensure argument parsing works) ---
     # ----------------------------------------------------------------
-
+    # FIX: Using @commands.command() here ensures the 'state' argument is correctly handled.
+    @commands.command(name="lockdown")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def captchaset_lockdown(self, ctx: Context, state: bool):
@@ -133,14 +132,24 @@ class LockdownMixin:
             await ctx.send("✅ User queue processed. CAPTCHAs have been initiated for new members.")
 
     # ----------------------------------------------------------------
-    # --- Command Attachment Function (Callable by the main cog) ---
+    # --- Command Attachment Function (Used by the main cog's __init__) ---
     # ----------------------------------------------------------------
     def _add_lockdown_command(self, captchaset_group: commands.Group):
-        """Attaches the lockdown command (method) to the main group."""
-        captchaset_group.add_command(
-            commands.Command(
-                self.captchaset_lockdown,
-                name="lockdown"
-            )
-        )
+        """
+        Attaches the decorated 'lockdown' command to the main 'captchaset' group.
+        This prevents the command from being registered at the top level.
+        """
+        
+        # 1. Get the command object created by the @commands.command() decorator
+        lockdown_cmd = self.captchaset_lockdown
+        
+        # 2. Remove it from the Mixin's commands (it currently exists as a top-level command)
+        # This prevents it from being callable as `[p]lockdown`
+        if lockdown_cmd.name in self.get_commands():
+            self.remove_command(lockdown_cmd.name)
+
+        # 3. Add the command object to the target group in the main cog
+        # This makes it callable as `[p]captchaset lockdown`
+        captchaset_group.add_command(lockdown_cmd)
+        
 # --- END LockdownMixin ---
