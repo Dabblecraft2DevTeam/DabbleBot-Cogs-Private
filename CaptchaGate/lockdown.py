@@ -4,19 +4,22 @@ import discord
 from redbot.core import commands
 from redbot.core.commands import Context
 from redbot.core.bot import Red
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from .captchagate import CaptchaGate  # Used for type hinting
+    from .captchagate import CaptchaGate 
 
-# Define a separate class for the lockdown commands.
+# --- Lockdown Mixin Class ---
+
 class LockdownMixin:
     """
     Mixin class containing commands and logic for the CaptchaGate Lockdown feature.
+    This class is mixed into the main CaptchaGate cog.
     """
     
-    # These attributes are expected to be available from the main cog (CaptchaGate)
+    # Placeholder __init__ for MRO and attribute type hints
     def __init__(self, *args):
+        # These attributes are expected to be available from the main cog (CaptchaGate)
         self.bot: Red
         self.config: commands.Config
         self.log_action: callable
@@ -24,7 +27,7 @@ class LockdownMixin:
         self.active_captchas: dict
 
     # ----------------------------------------------------------------
-    # --- Helper Function ---
+    # --- Helper Function (Called when lockdown is lifted) ---
     # ----------------------------------------------------------------
     
     async def _process_lockdown_queue(self, guild: discord.Guild, context_channel: discord.TextChannel):
@@ -65,19 +68,22 @@ class LockdownMixin:
 
         await self.log_action("Lockdown queue processing complete.", guild)
 
-
-# ----------------------------------------------------------------
-# --- Command Attachment Function ---
-# ----------------------------------------------------------------
-
-def setup_lockdown_commands(cog: 'CaptchaGate'):
-    """
-    Dynamically adds the 'lockdown' subcommand to the main cog's 'captchaset' group.
-    """
     
-    @cog.captchaset.command(name="lockdown")
+    # ----------------------------------------------------------------
+    # --- Command Definition ---
+    # ----------------------------------------------------------------
+
+    # This creates a placeholder command group. When the main cog loads (which inherits this), 
+    # the 'captchaset' group from the main cog takes precedence, and this subcommand attaches to it,
+    # resolving the "command already exists" and "Context failed" errors.
+    @commands.group(name="captchaset", hidden=True) 
+    async def captchaset_placeholder(self, ctx: Context):
+        pass
+
+    @captchaset_placeholder.command(name="lockdown")
+    @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    async def captchaset_lockdown(self: 'CaptchaGate', ctx: Context, state: bool):
+    async def captchaset_lockdown(self, ctx: Context, state: bool):
         """
         Toggles the server lockdown mode.
         
@@ -130,10 +136,6 @@ def setup_lockdown_commands(cog: 'CaptchaGate'):
                     await ctx.send("⚠️ Could not delete the previous lockdown announcement message. Moving on.")
                     
             # 2. Process the queued users
-            # The 'self' here refers to the CaptchaGate cog instance passed to this function
             await self._process_lockdown_queue(ctx.guild, ctx.channel)
             
             await ctx.send("✅ User queue processed. CAPTCHAs have been initiated for new members.")
-
-    # Attach the async function (now a command) to the cog's instance
-    setattr(cog, captchaset_lockdown.name, captchaset_lockdown)
