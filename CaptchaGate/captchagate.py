@@ -36,6 +36,7 @@ class CaptchaView(discord.ui.View):
         for option in options:
             button = discord.ui.Button(label=option, style=discord.ButtonStyle.secondary)
             
+            # Using partial for callback to pass the option label
             button.callback = lambda interaction, label=option: self.process_answer(interaction, label)
             self.add_item(button)
 
@@ -74,6 +75,49 @@ class CaptchaView(discord.ui.View):
         await self.cog.log_action(f"CAPTCHA attempt by {self.member.name} ({self.member.id}). Correct: **{is_correct}**", self.member.guild)
 
 
+# --- View for DM Retry ---
+
+class RetryView(discord.ui.View):
+    """A view with a button to retry the CAPTCHA after enabling DMs."""
+    def __init__(self, cog, member: discord.Member, timeout: int, error_channel: discord.TextChannel):
+        super().__init__(timeout=timeout)
+        self.cog = cog
+        self.member = member
+        self.error_channel = error_channel # Channel where the error message is posted
+        self.add_item(discord.ui.Button(label="I've Enabled DMs - Retry CAPTCHA", style=discord.ButtonStyle.success))
+        self.children[0].callback = self.on_retry_click
+        
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Only allows the target member to interact with the button."""
+        if interaction.user == self.member:
+            return True
+        await interaction.response.send_message("🚫 This button is only for the person who needs to verify.", ephemeral=True)
+        return False
+
+    async def on_retry_click(self, interaction: discord.Interaction):
+        """Callback when the user clicks the retry button."""
+        self.stop()
+        for item in self.children:
+            item.disabled = True
+        
+        # Disable the button immediately
+        await interaction.message.edit(view=self)
+        
+        # Notify the user privately and restart the process
+        await interaction.response.send_message("Attempting to resend CAPTCHA via DM...", ephemeral=True)
+        await self.cog.log_action(f"🔄 {self.member.name} requested CAPTCHA retry.", self.member.guild)
+        
+        # Restart the CAPTCHA process for the member
+        await self.cog.handle_dm_retry(self.member, interaction.message)
+        
+    async def on_timeout(self):
+        """Disable buttons on timeout."""
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            await self.message.edit(view=self)
+
+
 # --- Main Cog Class ---
 
 class CaptchaGate(commands.Cog):
@@ -99,7 +143,7 @@ class CaptchaGate(commands.Cog):
         
         self.config.register_guild(**default_guild)
         
-        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int}}
+        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
         self.active_captchas = {} 
         self.kick_task = self.kick_timed_out_users.start()
 
@@ -124,7 +168,7 @@ class CaptchaGate(commands.Cog):
 
     async def _delete_channel_messages(self, guild: discord.Guild, channel: discord.TextChannel, member_data: dict):
         """Helper to delete public CAPTCHA messages and welcome messages."""
-        message_keys = ["message_id", "public_message_id"]
+        message_keys = ["message_id", "public_message_id", "error_message_id"]
 
         for key in message_keys:
             message_id = member_data.get(key)
@@ -163,7 +207,12 @@ class CaptchaGate(commands.Cog):
         elif mode == "PRIVATE_CHANNEL":
             await self._delete_private_channel(member, member_data.get("channel_id"))
         
-        # DM mode requires no message cleanup
+        elif mode == "DM":
+            # DM mode: Clean up public error/notification messages if they exist
+            channel_id = guild_settings["captcha_channel"]
+            channel = member.guild.get_channel(channel_id)
+            if channel:
+                await self._delete_channel_messages(member.guild, channel, member_data)
 
         self.active_captchas.pop(member.id, None)
 
@@ -203,6 +252,23 @@ class CaptchaGate(commands.Cog):
             remaining = max_attempts - current_attempts
             await self.log_action(f"❌ {member.name} failed attempt {current_attempts}/{max_attempts}.", member.guild)
             await self._send_captcha(member)
+
+    async def handle_dm_retry(self, member: discord.Member, error_message: discord.Message):
+        """Cleans up the DM error message and restarts the CAPTCHA process for the user."""
+        member_data = self.active_captchas.get(member.id)
+        if not member_data: return
+
+        # 1. Clear the error message from the channel
+        try:
+            await error_message.delete()
+        except Exception:
+            pass
+            
+        # 2. Reset the kick timer to ensure the user gets a full timeout period
+        member_data["start_time"] = time.time() 
+        
+        # 3. Send the CAPTCHA again
+        await self._send_captcha(member)
 
 
     async def _kick_user(self, member: discord.Member, reason: str):
@@ -286,15 +352,61 @@ class CaptchaGate(commands.Cog):
             self.active_captchas[member.id]["public_message_id"] = public_message.id 
             self.active_captchas[member.id]["message_id"] = captcha_message.id 
 
-        # --- B. DM Mode (Private, requires no cleanup) ---
+        # --- B. DM Mode (Private, requires DM notification/error handling) ---
         elif mode == "DM":
+            channel_id = guild_settings["captcha_channel"]
+            channel = member.guild.get_channel(channel_id)
+            if not channel: 
+                await self.log_action(f"⚠️ DM Mode selected but no captcha_channel is set for public notifications.", member.guild)
+                return
+
+            # Clear previous error/notification messages before retrying
+            await self._delete_channel_messages(member.guild, channel, self.active_captchas[member.id])
+
+            # --- ATTEMPT 1: Send CAPTCHA via DM ---
             try:
                 # Send CAPTCHA message directly to the user's DM
-                message = await member.send(content="Please complete the CAPTCHA below!", embed=captcha_embed, view=view)
-                view.message = message # For on_timeout disable
+                dm_message = await member.send(content="Please complete the CAPTCHA below!", embed=captcha_embed, view=view)
+                view.message = dm_message 
+                
+                # --- Send Public Notification with DM Link ---
+                notification_embed = discord.Embed(
+                    title="✅ Check Your DMs!",
+                    description=(
+                        f"{member.mention}, please check your Direct Messages for the verification test."
+                        f"\n\n[**Click here to jump to the DM CAPTCHA**]({dm_message.jump_url})"
+                    ),
+                    color=discord.Color.green()
+                )
+                # Send the notification in the public channel, delete after timeout
+                notification_message = await channel.send(member.mention, embed=notification_embed, delete_after=kick_timeout)
+                self.active_captchas[member.id]["public_message_id"] = notification_message.id # Track for cleanup
+
+            # --- CATCH: DMs Disabled ---
             except discord.Forbidden:
                 await self.log_action(f"❌ Failed to send CAPTCHA to DM for {member.name}. DMs are blocked.", member.guild)
-                await self._kick_user(member, "DMs blocked. Cannot complete verification.")
+                
+                # Send public error message with retry button
+                error_embed = discord.Embed(
+                    title="🚫 DMs Disabled - Verification Failed",
+                    description=(
+                        f"{member.mention}, I cannot send you the CAPTCHA because your DMs are blocked."
+                        f"\n\n**Please enable DMs for this server** and click the button below to retry."
+                    ),
+                    color=discord.Color.red()
+                )
+                # Create the Retry View
+                retry_view = RetryView(self, member, kick_timeout, channel)
+                
+                # Send the message with the retry button
+                error_message = await channel.send(member.mention, embed=error_embed, view=retry_view)
+
+                # Store the error message ID for cleanup (if they pass or get kicked later)
+                self.active_captchas[member.id]["error_message_id"] = error_message.id 
+                
+                # The kick timer continues to run, but the user is given the chance to retry.
+                # Since the kick timer uses the original start_time, the user is still on the clock.
+
 
         # --- C. PRIVATE_CHANNEL Mode (Truly private, requires channel creation/deletion) ---
         elif mode == "PRIVATE_CHANNEL":
@@ -349,6 +461,7 @@ class CaptchaGate(commands.Cog):
             "attempts": 0,
             "message_id": None, 
             "public_message_id": None,
+            "error_message_id": None, # New ID for DM error message cleanup
             "channel_id": None, 
         }
         
@@ -417,15 +530,23 @@ class CaptchaGate(commands.Cog):
 
 
     @captchaset.command(name="mode")
-    async def captchaset_mode(self, ctx: commands.Context, mode: VERIFICATION_MODES):
+    async def captchaset_mode(self, ctx: commands.Context, mode: str):
         """
-        Sets the delivery method for the CAPTCHA.
+        Sets the delivery method for the CAPTCHA (case-insensitive).
         
         PUBLIC: Visible in a channel (secure only by interaction_check).
         DM: Private, sent via Direct Message (requires DMs to be open).
         PRIVATE_CHANNEL: Creates a private channel for verification (most secure, requires 'manage channels' perm).
         """
+        # Convert input to uppercase to handle 'public', 'Public', 'pUbLiC', etc.
         mode = mode.upper()
+        
+        # Check against the three valid modes
+        if mode not in ["PUBLIC", "DM", "PRIVATE_CHANNEL"]:
+            valid_modes = ", ".join(["PUBLIC", "DM", "PRIVATE_CHANNEL"])
+            return await ctx.send(f"❌ Invalid mode provided. Please choose one of: **{valid_modes}**.")
+            
+        # Check for required channel setting if the mode isn't DM
         if mode != "DM" and not await self.config.guild(ctx.guild).captcha_channel():
             return await ctx.send("❌ You must set a `captcha_channel` before using **PUBLIC** or **PRIVATE_CHANNEL** mode.")
 
