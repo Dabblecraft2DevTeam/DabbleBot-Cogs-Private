@@ -7,6 +7,7 @@ from redbot.core.bot import Red
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    # This import is only for type hinting the main cog class if needed
     from .captchagate import CaptchaGate 
 
 # --- Lockdown Mixin Class ---
@@ -19,7 +20,8 @@ class LockdownMixin:
     
     # Placeholder __init__ for MRO and attribute type hints
     def __init__(self, *args):
-        # These attributes are expected to be available from the main cog (CaptchaGate)
+        # These are attributes defined in the main CaptchaGate class, 
+        # which this mixin needs access to.
         self.bot: Red
         self.config: commands.Config
         self.log_action: callable
@@ -50,9 +52,8 @@ class LockdownMixin:
             
             # Check if the user is still in the server
             if member:
-                # Initialize CAPTCHA data for the member
                 self.active_captchas[member.id] = {
-                    "start_time": time.time(), # Reset the timer to now
+                    "start_time": time.time(),
                     "attempts": 0,
                     "message_id": None, 
                     "public_message_id": None,
@@ -60,9 +61,8 @@ class LockdownMixin:
                     "channel_id": None, 
                 }
                 
-                # Send the CAPTCHA via the main cog's function
                 await self._send_captcha(member)
-                await asyncio.sleep(1) # Small delay to avoid hitting rate limits too hard
+                await asyncio.sleep(1)
             else:
                 await self.log_action(f"Skipped queued user ID {user_id} - user left the server.", guild)
 
@@ -70,17 +70,9 @@ class LockdownMixin:
 
     
     # ----------------------------------------------------------------
-    # --- Command Definition ---
+    # --- Command Method (Method to be registered as a command) ---
     # ----------------------------------------------------------------
 
-    # This creates a placeholder command group. When the main cog loads (which inherits this), 
-    # the 'captchaset' group from the main cog takes precedence, and this subcommand attaches to it,
-    # resolving the "command already exists" and "Context failed" errors.
-    @commands.group(name="captchaset", hidden=True) 
-    async def captchaset_placeholder(self, ctx: Context):
-        pass
-
-    @captchaset_placeholder.command(name="lockdown")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def captchaset_lockdown(self, ctx: Context, state: bool):
@@ -139,3 +131,16 @@ class LockdownMixin:
             await self._process_lockdown_queue(ctx.guild, ctx.channel)
             
             await ctx.send("✅ User queue processed. CAPTCHAs have been initiated for new members.")
+
+    # ----------------------------------------------------------------
+    # --- Command Attachment Function (Callable by the main cog) ---
+    # ----------------------------------------------------------------
+    def _add_lockdown_command(self, captchaset_group: commands.Group):
+        """Attaches the lockdown command (method) to the main group."""
+        captchaset_group.add_command(
+            commands.Command(
+                self.captchaset_lockdown,
+                name="lockdown"
+            )
+        )
+# --- END LockdownMixin ---
