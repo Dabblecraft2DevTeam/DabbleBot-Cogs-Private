@@ -198,21 +198,22 @@ class CaptchaGate(commands.Cog):
         
         if not member_data: return
 
-        if mode == "PUBLIC":
+        if mode == "PUBLIC" or mode == "DM": # DM mode uses public messages for error/notification
             channel_id = guild_settings["captcha_channel"]
             channel = member.guild.get_channel(channel_id)
             if channel:
                 await self._delete_channel_messages(member.guild, channel, member_data)
 
         elif mode == "PRIVATE_CHANNEL":
+            # 1. Delete the temporary private channel
             await self._delete_private_channel(member, member_data.get("channel_id"))
-        
-        elif mode == "DM":
-            # DM mode: Clean up public error/notification messages if they exist
+            
+            # 2. Delete the public welcome message (uses the same logic as PUBLIC/DM cleanup)
             channel_id = guild_settings["captcha_channel"]
             channel = member.guild.get_channel(channel_id)
             if channel:
                 await self._delete_channel_messages(member.guild, channel, member_data)
+            
 
         self.active_captchas.pop(member.id, None)
 
@@ -431,16 +432,19 @@ class CaptchaGate(commands.Cog):
             )
             self.active_captchas[member.id]["channel_id"] = private_channel.id
             
-            # Send Public Welcome to guide user
-            await base_channel.send(member.mention, embed=discord.Embed(
+            # Send Public Welcome to guide user (THIS MESSAGE IS THE ONE WE NEED TO TRACK)
+            public_message = await base_channel.send(member.mention, embed=discord.Embed(
                 title=guild_settings["welcome_embed_title"],
                 description=f"Welcome! Please head to {private_channel.mention} to complete verification.",
                 color=await self.bot.get_embed_color(member)
             ), delete_after=kick_timeout)
             
+            # *** ADDED: Store the public message ID for cleanup ***
+            self.active_captchas[member.id]["public_message_id"] = public_message.id 
+            
             # Send CAPTCHA message to the private channel
             captcha_message = await private_channel.send(f"**Verification Test:** {member.mention}", embed=captcha_embed, view=view)
-            view.message = captcha_message 
+            view.message = captcha_message
 
 
 # ----------------------------------------------------------------
