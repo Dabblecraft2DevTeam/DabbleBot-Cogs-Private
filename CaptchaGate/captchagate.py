@@ -79,11 +79,10 @@ class CaptchaView(discord.ui.View):
 
 class RetryView(discord.ui.View):
     """A view with a button to retry the CAPTCHA after enabling DMs."""
-    def __init__(self, cog, member: discord.Member, timeout: int, error_channel: discord.TextChannel):
+    def __init__(self, cog, member: discord.Member, timeout: int):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.member = member
-        self.error_channel = error_channel # Channel where the error message is posted
         self.add_item(discord.ui.Button(label="I've Enabled DMs - Retry CAPTCHA", style=discord.ButtonStyle.success))
         self.children[0].callback = self.on_retry_click
         
@@ -174,6 +173,8 @@ class CaptchaGate(commands.Cog):
             message_id = member_data.get(key)
             if message_id:
                 try:
+                    # Clear the message ID immediately from the data to prevent re-attempts at deletion
+                    member_data[key] = None 
                     message = await channel.fetch_message(message_id)
                     await message.delete()
                 except Exception:
@@ -198,22 +199,18 @@ class CaptchaGate(commands.Cog):
         
         if not member_data: return
 
-        if mode == "PUBLIC" or mode == "DM": # DM mode uses public messages for error/notification
+        # All modes that use the public channel need the cleanup handled here.
+        if mode in ["PUBLIC", "DM", "PRIVATE_CHANNEL"]:
             channel_id = guild_settings["captcha_channel"]
             channel = member.guild.get_channel(channel_id)
             if channel:
+                # This handles public_message_id (PRIVATE_CHANNEL welcome message/PUBLIC captcha) 
+                # and error_message_id (DM failure notification).
                 await self._delete_channel_messages(member.guild, channel, member_data)
-
-        elif mode == "PRIVATE_CHANNEL":
-            # 1. Delete the temporary private channel
+        
+        if mode == "PRIVATE_CHANNEL":
+            # This handles the deletion of the temporary private text channel.
             await self._delete_private_channel(member, member_data.get("channel_id"))
-            
-            # 2. Delete the public welcome message (uses the same logic as PUBLIC/DM cleanup)
-            channel_id = guild_settings["captcha_channel"]
-            channel = member.guild.get_channel(channel_id)
-            if channel:
-                await self._delete_channel_messages(member.guild, channel, member_data)
-            
 
         self.active_captchas.pop(member.id, None)
 
@@ -261,11 +258,13 @@ class CaptchaGate(commands.Cog):
 
         # 1. Clear the error message from the channel
         try:
+            # We don't use _delete_channel_messages here as we have the message object
             await error_message.delete()
         except Exception:
             pass
             
-        # 2. Reset the kick timer to ensure the user gets a full timeout period
+        # 2. Clear the tracked error ID and reset the kick timer
+        member_data["error_message_id"] = None
         member_data["start_time"] = time.time() 
         
         # 3. Send the CAPTCHA again
@@ -299,8 +298,27 @@ class CaptchaGate(commands.Cog):
             await self.log_action(f"⚠️ No challenges configured for {member.name}.", member.guild)
             return
 
-        # 1. Prepare CAPTCHA data
-        challenge = random.choice(list(challenges.values()))
+        # 1. Prepare CAPTCHA data - Using LRU (Least Recently Used) for better challenge distribution
+        
+        challenge_items = list(challenges.items())
+        
+        # Sort the challenges by the 'last_used' timestamp (oldest first, default to 0 if not set)
+        sorted_challenges = sorted(challenge_items, key=lambda item: item[1].get("last_used", 0))
+
+        # Take the top N (e.g., 3) least recently used challenges
+        top_n = 3
+        least_used_pool = sorted_challenges[:top_n]
+        
+        # Select one random challenge from this smaller, weighted pool
+        # If less than N challenges exist, it just chooses from the existing pool
+        selected_challenge_id, challenge = random.choice(least_used_pool)
+        
+        # UPDATE CONFIG: Mark the selected challenge as used now
+        async with self.config.guild(member.guild).challenges() as challenges_config:
+            # Note: This updates the guild config when the challenge is chosen, not when it's completed.
+            challenges_config[selected_challenge_id]["last_used"] = time.time()
+        
+        # Extract data from the selected challenge
         image_url = challenge["image_url"]
         options = challenge["options"]
         correct_option = challenge["correct_option"]
@@ -397,16 +415,15 @@ class CaptchaGate(commands.Cog):
                     color=discord.Color.red()
                 )
                 # Create the Retry View
-                retry_view = RetryView(self, member, kick_timeout, channel)
+                retry_view = RetryView(self, member, kick_timeout)
                 
                 # Send the message with the retry button
                 error_message = await channel.send(member.mention, embed=error_embed, view=retry_view)
 
-                # Store the error message ID for cleanup (if they pass or get kicked later)
+                # Store the error message ID for cleanup 
                 self.active_captchas[member.id]["error_message_id"] = error_message.id 
                 
-                # The kick timer continues to run, but the user is given the chance to retry.
-                # Since the kick timer uses the original start_time, the user is still on the clock.
+                # The kick timer continues to run, but the user is given the chance to retry by using the button.
 
 
         # --- C. PRIVATE_CHANNEL Mode (Truly private, requires channel creation/deletion) ---
@@ -432,19 +449,19 @@ class CaptchaGate(commands.Cog):
             )
             self.active_captchas[member.id]["channel_id"] = private_channel.id
             
-            # Send Public Welcome to guide user (THIS MESSAGE IS THE ONE WE NEED TO TRACK)
+            # Send Public Welcome to guide user (THIS MESSAGE IS TRACKED FOR CLEANUP)
             public_message = await base_channel.send(member.mention, embed=discord.Embed(
                 title=guild_settings["welcome_embed_title"],
                 description=f"Welcome! Please head to {private_channel.mention} to complete verification.",
                 color=await self.bot.get_embed_color(member)
             ), delete_after=kick_timeout)
             
-            # *** ADDED: Store the public message ID for cleanup ***
+            # Store the public message ID for cleanup
             self.active_captchas[member.id]["public_message_id"] = public_message.id 
             
             # Send CAPTCHA message to the private channel
             captcha_message = await private_channel.send(f"**Verification Test:** {member.mention}", embed=captcha_embed, view=view)
-            view.message = captcha_message
+            view.message = captcha_message 
 
 
 # ----------------------------------------------------------------
@@ -465,7 +482,7 @@ class CaptchaGate(commands.Cog):
             "attempts": 0,
             "message_id": None, 
             "public_message_id": None,
-            "error_message_id": None, # New ID for DM error message cleanup
+            "error_message_id": None, 
             "channel_id": None, 
         }
         
@@ -542,15 +559,12 @@ class CaptchaGate(commands.Cog):
         DM: Private, sent via Direct Message (requires DMs to be open).
         PRIVATE_CHANNEL: Creates a private channel for verification (most secure, requires 'manage channels' perm).
         """
-        # Convert input to uppercase to handle 'public', 'Public', 'pUbLiC', etc.
         mode = mode.upper()
         
-        # Check against the three valid modes
         if mode not in ["PUBLIC", "DM", "PRIVATE_CHANNEL"]:
             valid_modes = ", ".join(["PUBLIC", "DM", "PRIVATE_CHANNEL"])
             return await ctx.send(f"❌ Invalid mode provided. Please choose one of: **{valid_modes}**.")
             
-        # Check for required channel setting if the mode isn't DM
         if mode != "DM" and not await self.config.guild(ctx.guild).captcha_channel():
             return await ctx.send("❌ You must set a `captcha_channel` before using **PUBLIC** or **PRIVATE_CHANNEL** mode.")
 
@@ -640,6 +654,8 @@ class CaptchaGate(commands.Cog):
                 "image_url": image_url,
                 "options": options_list,
                 "correct_option": correct_option,
+                # Store the current time when added. If it was never used, it's the "oldest" used one.
+                "last_used": time.time(), 
             }
 
         await ctx.send(f"✅ Challenge `{challenge_id}` added! Correct option: `{correct_option}`. Options: {humanize_list(options_list)}")
@@ -651,7 +667,11 @@ class CaptchaGate(commands.Cog):
         if not challenges:
             return await ctx.send("No CAPTCHA challenges have been configured yet.")
             
-        output = [f"**{cid}**: Correct: `{c['correct_option']}` | Options: {humanize_list(c['options'])}" for cid, c in challenges.items()]
+        output = []
+        for cid, c in challenges.items():
+            # Display last used time in a readable format
+            last_used_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(c.get("last_used", 0)))
+            output.append(f"**{cid}**: Correct: `{c['correct_option']}` | Last Used: `{last_used_time}` | Options: {humanize_list(c['options'])}")
         
         pages = await self.bot.formatter.format_list_neatly(output)
         
