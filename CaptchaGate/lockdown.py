@@ -81,8 +81,12 @@ def setup_lockdown_commands(cog: 'CaptchaGate'):
         """
         Toggles the server lockdown mode.
         
-        When enabled, new users are placed in a queue and a message is posted.
-        When disabled, the queue is processed and CAPTCHAs are sent out.
+        When enabled (`True`), new users are placed in a queue and a message is posted.
+        When disabled (`False`), the queue is processed and CAPTCHAs are sent out to queued users.
+
+        Arguments:
+        - <state>: Must be `True` to enable lockdown or `False` to disable it.
+                   (Example: `[p]captchaset lockdown True`)
         """
         current_state = await self.config.guild(ctx.guild).lockdown_enabled()
         captcha_channel_id = await self.config.guild(ctx.guild).captcha_channel()
