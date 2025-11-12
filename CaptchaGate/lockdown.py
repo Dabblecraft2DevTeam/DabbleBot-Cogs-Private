@@ -7,6 +7,8 @@ from redbot.core.bot import Red
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    # This is a type-checking hint and helps static analysis tools (like mypy)
+    # resolve the type of self within the mixin, which is a CaptchaGate instance.
     from .captchagate import CaptchaGate 
 
 # --- Lockdown Mixin Class ---
@@ -53,13 +55,15 @@ class LockdownMixin:
                 self.active_captchas[member.id] = {
                     "start_time": time.time(),
                     "attempts": 0,
-                    "message_id": None, 
+                    "code": None, # Assuming you have a default for code
+                    "message_id": None,
                     "public_message_id": None,
                     "error_message_id": None, 
                     "channel_id": None, 
                 }
                 
-                await self._send_captcha(member)
+                # Assuming _send_captcha generates the code when called
+                await self._send_captcha(member) 
                 await asyncio.sleep(1)
             else:
                 await self.log_action(f"Skipped queued user ID {user_id} - user left the server.", guild)
@@ -68,9 +72,8 @@ class LockdownMixin:
 
     
     # ----------------------------------------------------------------
-    # --- Command Method (DECORATED to ensure argument parsing works) ---
+    # --- Command Method (DECORATED for proper argument parsing) ---
     # ----------------------------------------------------------------
-    # FIX: Using @commands.command() here ensures the 'state' argument is correctly handled.
     @commands.command(name="lockdown")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
@@ -99,6 +102,14 @@ class LockdownMixin:
         if state: # ENABLE LOCKDOWN
             await self.config.guild(ctx.guild).lockdown_enabled.set(True)
             
+            # --- LOGGING: Lockdown Enabled ---
+            log_message = (
+                f"🔒 **Lockdown ENABLED** by {ctx.author.mention} (`{ctx.author.name}`). "
+                f"New users are being queued."
+            )
+            await self.log_action(log_message, ctx.guild)
+            # ---------------------------------
+
             lockdown_embed = discord.Embed(
                 title="🔒 Server Verification Locked Down",
                 description="The server is currently experiencing high traffic or a raid. Verification has been temporarily paused. Please be patient, you will automatically receive the CAPTCHA when the lockdown is lifted.",
@@ -114,6 +125,17 @@ class LockdownMixin:
 
         else: # DISABLE LOCKDOWN
             await self.config.guild(ctx.guild).lockdown_enabled.set(False)
+            
+            # --- LOGGING: Lockdown Disabled ---
+            # Pre-calculate the queue size for the log message
+            queued_users_count = len(await self.config.guild(ctx.guild).lockdown_users())
+            log_message = (
+                f"🔓 **Lockdown DISABLED** by {ctx.author.mention} (`{ctx.author.name}`). "
+                f"Processing {queued_users_count} queued users."
+            )
+            await self.log_action(log_message, ctx.guild)
+            # ----------------------------------
+            
             await ctx.send("✅ Server lockdown **DISABLED**. Processing user queue...")
             
             # 1. Clean up the announcement message
@@ -131,6 +153,7 @@ class LockdownMixin:
             
             await ctx.send("✅ User queue processed. CAPTCHAs have been initiated for new members.")
 
+
     # ----------------------------------------------------------------
     # --- Command Attachment Function (Used by the main cog's __init__) ---
     # ----------------------------------------------------------------
@@ -144,12 +167,10 @@ class LockdownMixin:
         lockdown_cmd = self.captchaset_lockdown
         
         # 2. Remove it from the Mixin's commands (it currently exists as a top-level command)
-        # This prevents it from being callable as `[p]lockdown`
         if lockdown_cmd.name in self.get_commands():
             self.remove_command(lockdown_cmd.name)
 
         # 3. Add the command object to the target group in the main cog
-        # This makes it callable as `[p]captchaset lockdown`
         captchaset_group.add_command(lockdown_cmd)
         
 # --- END LockdownMixin ---
