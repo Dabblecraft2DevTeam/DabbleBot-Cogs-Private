@@ -1,8 +1,14 @@
 {
-    "author" : ["keough99"],
-    "install_msg" : "DabbleBot Private has been installed",
-    "name" : "DabbleBot-Cogs-Private",
-    "short" : "DabbleBot Cogs",
-    "description" : "Contains Cogs for DabbleBot",
-    "tags" : ["utility"]
+    "author": ["YourName"],
+    "name": "MusicStatus",
+    "short": "Automatically updates voice channel status to the currently playing track.",
+    "description": "A Red cog that hooks into Lavalink to update the bot's voice channel status with the current track title.",
+    "end_user_data_statement": "This cog does not persistently store data or user information.",
+    "install_msg": "Thanks for installing MusicStatus! Make sure the bot has the 'Set Voice Channel Status' permission in its voice channels.",
+    "requirements": [],
+    "tags": ["music", "status", "lavalink", "voice"],
+    "min_bot_version": "3.5.0",
+    "hidden": false,
+    "disabled": false,
+    "type": "COG"
 }
