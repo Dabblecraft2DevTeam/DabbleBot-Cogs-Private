@@ -29,7 +29,7 @@ class MusicStatus(commands.Cog):
             track = player.current
             if track:
                 # Discord restricts voice channel statuses to 500 characters
-                status_text = f"🎶 Now playing: {track.title}"[:500]
+                status_text = f" 📻 | {track.title}"[:500]
                 try:
                     await channel.edit(status=status_text)
                     log.debug(f"Updated status in {channel.guild.name} to {track.title}")
