@@ -26,6 +26,7 @@ class CaptchaView(discord.ui.View):
         self.member = member
         self.correct_answer = correct_answer
         self.message: Optional[discord.Message] = None 
+        self._is_processing = False
         
         self._create_buttons(options)
 
@@ -53,24 +54,42 @@ class CaptchaView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         if self.message:
-            await self.message.edit(view=self)
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
     async def process_answer(self, interaction: discord.Interaction, user_answer: str):
         """Handles a button click and processes the user's answer."""
+        if self._is_processing:
+            try:
+                await interaction.response.defer()
+            except discord.HTTPException:
+                pass
+            return
+            
+        self._is_processing = True
         self.stop()
         for item in self.children:
             item.disabled = True
-        if interaction.message:
-            await interaction.message.edit(view=self)
+            
+        try:
+            if interaction.message:
+                await interaction.message.edit(view=self)
+        except discord.HTTPException:
+            pass
         
         is_correct = user_answer == self.correct_answer
 
-        if is_correct:
-            await interaction.response.send_message("✅ **Success!** You passed the CAPTCHA.", ephemeral=True)
-            await self.cog.grant_role_and_cleanup(self.member) 
-        else:
-            await interaction.response.send_message("❌ **Incorrect!** Please try again.", ephemeral=True)
-            await self.cog.handle_failed_attempt(self.member)
+        try:
+            if is_correct:
+                await interaction.response.send_message("✅ **Success!** You passed the CAPTCHA.", ephemeral=True)
+                await self.cog.grant_role_and_cleanup(self.member) 
+            else:
+                await interaction.response.send_message("❌ **Incorrect!** Please try again.", ephemeral=True)
+                await self.cog.handle_failed_attempt(self.member)
+        except discord.HTTPException:
+            pass
         
         await self.cog.log_action(f"CAPTCHA attempt by {self.member.name} ({self.member.id}). Correct: **{is_correct}**", self.member.guild)
 
@@ -83,6 +102,8 @@ class RetryView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.member = member
+        self.message: Optional[discord.Message] = None
+        self._is_processing = False
         self.add_item(discord.ui.Button(label="I've Enabled DMs - Retry CAPTCHA", style=discord.ButtonStyle.success))
         self.children[0].callback = self.on_retry_click
         
@@ -95,15 +116,31 @@ class RetryView(discord.ui.View):
 
     async def on_retry_click(self, interaction: discord.Interaction):
         """Callback when the user clicks the retry button."""
+        if self._is_processing:
+            try:
+                await interaction.response.defer()
+            except discord.HTTPException:
+                pass
+            return
+            
+        self._is_processing = True
         self.stop()
         for item in self.children:
             item.disabled = True
         
         # Disable the button immediately
-        await interaction.message.edit(view=self)
+        try:
+            if interaction.message:
+                await interaction.message.edit(view=self)
+        except discord.HTTPException:
+            pass
         
         # Notify the user privately and restart the process
-        await interaction.response.send_message("Attempting to resend CAPTCHA via DM...", ephemeral=True)
+        try:
+            await interaction.response.send_message("Attempting to resend CAPTCHA via DM...", ephemeral=True)
+        except discord.HTTPException:
+            pass
+            
         await self.cog.log_action(f"🔄 {self.member.name} requested CAPTCHA retry.", self.member.guild)
         
         # Restart the CAPTCHA process for the member
@@ -114,7 +151,10 @@ class RetryView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         if self.message:
-            await self.message.edit(view=self)
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
 
 # --- Main Cog Class ---
@@ -142,7 +182,7 @@ class CaptchaGate(commands.Cog):
         
         self.config.register_guild(**default_guild)
         
-        # Tracks {member_id: {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
+        # Tracks {(guild_id, member_id): {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
         self.active_captchas = {} 
         self.kick_task = self.kick_timed_out_users.start()
 
@@ -195,7 +235,7 @@ class CaptchaGate(commands.Cog):
         """Handles cleanup based on the verification mode."""
         guild_settings = await self.config.guild(member.guild).all()
         mode = guild_settings["verification_mode"]
-        member_data = self.active_captchas.get(member.id)
+        member_data = self.active_captchas.get((member.guild.id, member.id))
         
         if not member_data: return
 
@@ -212,7 +252,7 @@ class CaptchaGate(commands.Cog):
             # This handles the deletion of the temporary private text channel.
             await self._delete_private_channel(member, member_data.get("channel_id"))
 
-        self.active_captchas.pop(member.id, None)
+        self.active_captchas.pop((member.guild.id, member.id), None)
 
 
     async def grant_role_and_cleanup(self, member: discord.Member):
@@ -237,12 +277,12 @@ class CaptchaGate(commands.Cog):
 
     async def handle_failed_attempt(self, member: discord.Member):
         """Increments fail count and kicks user if max attempts are reached."""
-        if member.id not in self.active_captchas: return
+        if (member.guild.id, member.id) not in self.active_captchas: return
             
         guild_settings = await self.config.guild(member.guild).all()
         max_attempts = guild_settings["max_attempts"]
-        self.active_captchas[member.id]["attempts"] += 1
-        current_attempts = self.active_captchas[member.id]["attempts"]
+        self.active_captchas[(member.guild.id, member.id)]["attempts"] += 1
+        current_attempts = self.active_captchas[(member.guild.id, member.id)]["attempts"]
 
         if current_attempts >= max_attempts:
             await self._kick_user(member, f"Exceeded maximum CAPTCHA attempts ({max_attempts}).")
@@ -253,7 +293,7 @@ class CaptchaGate(commands.Cog):
 
     async def handle_dm_retry(self, member: discord.Member, error_message: discord.Message):
         """Cleans up the DM error message and restarts the CAPTCHA process for the user."""
-        member_data = self.active_captchas.get(member.id)
+        member_data = self.active_captchas.get((member.guild.id, member.id))
         if not member_data: return
 
         # 1. Clear the error message from the channel
@@ -324,7 +364,7 @@ class CaptchaGate(commands.Cog):
         correct_option = challenge["correct_option"]
         
         # Prepare attempts for the embed
-        attempts_data = self.active_captchas.get(member.id, {"attempts": 0})
+        attempts_data = self.active_captchas.get((member.guild.id, member.id), {"attempts": 0})
         attempts_remaining = guild_settings['max_attempts'] - attempts_data['attempts']
 
         # Prepare View and Embed
@@ -350,7 +390,7 @@ class CaptchaGate(commands.Cog):
             if not channel: return
             
             # Clean up old messages first (Handles retries)
-            await self._delete_channel_messages(member.guild, channel, self.active_captchas[member.id])
+            await self._delete_channel_messages(member.guild, channel, self.active_captchas[(member.guild.id, member.id)])
 
             # Send Public Welcome Message
             welcome_embed = discord.Embed(
@@ -368,8 +408,8 @@ class CaptchaGate(commands.Cog):
                 mention_author=False
             )
             view.message = captcha_message 
-            self.active_captchas[member.id]["public_message_id"] = public_message.id 
-            self.active_captchas[member.id]["message_id"] = captcha_message.id 
+            self.active_captchas[(member.guild.id, member.id)]["public_message_id"] = public_message.id 
+            self.active_captchas[(member.guild.id, member.id)]["message_id"] = captcha_message.id 
 
         # --- B. DM Mode (Private, requires DM notification/error handling) ---
         elif mode == "DM":
@@ -380,7 +420,7 @@ class CaptchaGate(commands.Cog):
                 return
 
             # Clear previous error/notification messages before retrying
-            await self._delete_channel_messages(member.guild, channel, self.active_captchas[member.id])
+            await self._delete_channel_messages(member.guild, channel, self.active_captchas[(member.guild.id, member.id)])
 
             # --- ATTEMPT 1: Send CAPTCHA via DM ---
             try:
@@ -399,7 +439,7 @@ class CaptchaGate(commands.Cog):
                 )
                 # Send the notification in the public channel, delete after timeout
                 notification_message = await channel.send(member.mention, embed=notification_embed, delete_after=kick_timeout)
-                self.active_captchas[member.id]["public_message_id"] = notification_message.id # Track for cleanup
+                self.active_captchas[(member.guild.id, member.id)]["public_message_id"] = notification_message.id # Track for cleanup
 
             # --- CATCH: DMs Disabled ---
             except discord.Forbidden:
@@ -421,7 +461,7 @@ class CaptchaGate(commands.Cog):
                 error_message = await channel.send(member.mention, embed=error_embed, view=retry_view)
 
                 # Store the error message ID for cleanup 
-                self.active_captchas[member.id]["error_message_id"] = error_message.id 
+                self.active_captchas[(member.guild.id, member.id)]["error_message_id"] = error_message.id 
                 
                 # The kick timer continues to run, but the user is given the chance to retry by using the button.
 
@@ -433,7 +473,7 @@ class CaptchaGate(commands.Cog):
             category = base_channel.category if base_channel else None
             
             # Clean up old channel first (Handles retries)
-            await self._delete_private_channel(member, self.active_captchas[member.id].get("channel_id"))
+            await self._delete_private_channel(member, self.active_captchas[(member.guild.id, member.id)].get("channel_id"))
             
             # Create Overwrites (Deny everyone, allow user, allow bot)
             overwrites = {
@@ -447,7 +487,7 @@ class CaptchaGate(commands.Cog):
             private_channel = await member.guild.create_text_channel(
                 channel_name, category=category, overwrites=overwrites, reason="Captcha Verification"
             )
-            self.active_captchas[member.id]["channel_id"] = private_channel.id
+            self.active_captchas[(member.guild.id, member.id)]["channel_id"] = private_channel.id
             
             # Send Public Welcome to guide user (THIS MESSAGE IS TRACKED FOR CLEANUP)
             public_message = await base_channel.send(member.mention, embed=discord.Embed(
@@ -457,7 +497,7 @@ class CaptchaGate(commands.Cog):
             ), delete_after=kick_timeout)
             
             # Store the public message ID for cleanup
-            self.active_captchas[member.id]["public_message_id"] = public_message.id 
+            self.active_captchas[(member.guild.id, member.id)]["public_message_id"] = public_message.id 
             
             # Send CAPTCHA message to the private channel
             captcha_message = await private_channel.send(f"**Verification Test:** {member.mention}", embed=captcha_embed, view=view)
@@ -477,7 +517,7 @@ class CaptchaGate(commands.Cog):
         if not guild_settings["challenges"] or (guild_settings["verification_mode"] != "DM" and not guild_settings["captcha_channel"]):
             return
 
-        self.active_captchas[member.id] = {
+        self.active_captchas[(member.guild.id, member.id)] = {
             "start_time": time.time(),
             "attempts": 0,
             "message_id": None, 
@@ -492,18 +532,22 @@ class CaptchaGate(commands.Cog):
     @tasks.loop(seconds=60)
     async def kick_timed_out_users(self):
         """Background task to kick users who time out."""
-        for user_id in list(self.active_captchas.keys()):
-            data = self.active_captchas[user_id]
+        for (guild_id, user_id) in list(self.active_captchas.keys()):
+            data = self.active_captchas[(guild_id, user_id)]
             start_time = data["start_time"]
 
-            for guild in self.bot.guilds:
+            guild = self.bot.get_guild(guild_id)
+            if guild:
                 member = guild.get_member(user_id)
                 if member:
                     kick_timeout = await self.config.guild(guild).kick_timeout()
                     
                     if (time.time() - start_time) > kick_timeout:
                         await self._kick_user(member, f"Timed out waiting for CAPTCHA completion after {kick_timeout} seconds.")
-                    break 
+                else:
+                    self.active_captchas.pop((guild_id, user_id), None)
+            else:
+                self.active_captchas.pop((guild_id, user_id), None)
 
     @kick_timed_out_users.before_loop
     async def before_kick_timed_out_users(self):
