@@ -30,9 +30,10 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         required=True
     )
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, msg: discord.Message):
         super().__init__()
         self.config = config
+        self.msg = msg
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -61,7 +62,14 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         saved_d = await self.config.all()
         print(f"[NBZHCRank Debug] Saved Config State: {saved_d}")
 
-        await interaction.followup.send("Database credentials have been saved successfully. Please check the bot's console for debug logs.", ephemeral=True)
+        # Delete the original prompt message
+        try:
+            if self.msg:
+                await self.msg.delete()
+        except discord.HTTPException:
+            pass
+
+        await interaction.followup.send("Database credentials have been saved successfully.", ephemeral=True)
 
 
 class NBZHCRank(commands.Cog):
@@ -95,16 +103,18 @@ class NBZHCRank(commands.Cog):
         view = discord.ui.View()
         button = discord.ui.Button(label="Configure Database", style=discord.ButtonStyle.primary)
         
+        msg = None
+        
         async def button_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
                 await interaction.response.send_message("You are not authorized to use this.", ephemeral=True)
                 return
-            await interaction.response.send_modal(DatabaseConfigModal(self.config))
+            await interaction.response.send_modal(DatabaseConfigModal(self.config, msg))
             
         button.callback = button_callback
         view.add_item(button)
         
-        await ctx.send("Click the button below to configure the database credentials securely.", view=view)
+        msg = await ctx.send("Click the button below to configure the database credentials securely.", view=view)
 
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
