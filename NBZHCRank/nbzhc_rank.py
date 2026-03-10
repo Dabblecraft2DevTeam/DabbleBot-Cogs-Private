@@ -36,6 +36,7 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        # discord.ui.TextInput values are strings. We must cast the port.
         try:
             port_num = int(self.port.value)
         except ValueError:
@@ -43,11 +44,11 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
             return
 
         # Use set() directly on the variables to store them in the root of the cog's global config
-        await self.config.host.set(self.host.value)
+        await self.config.host.set(str(self.host.value))
         await self.config.port.set(port_num)
-        await self.config.user.set(self.user.value)
-        await self.config.password.set(self.password.value)
-        await self.config.database.set(self.database.value)
+        await self.config.user.set(str(self.user.value))
+        await self.config.password.set(str(self.password.value))
+        await self.config.database.set(str(self.database.value))
 
         await interaction.followup.send("Database credentials have been saved successfully.", ephemeral=True)
 
