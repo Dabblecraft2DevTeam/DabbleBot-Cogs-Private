@@ -96,22 +96,18 @@ class NBZHCRank(commands.Cog):
         config_data = await self.config.all()
         # Ensure all required fields are set
         if not all([config_data.get("host"), config_data.get("user"), config_data.get("database")]):
-            return None
+            raise ValueError("Database credentials are not fully configured.")
 
-        try:
-            conn = await aiomysql.connect(
-                host=config_data["host"],
-                port=config_data["port"],
-                user=config_data["user"],
-                password=config_data["password"],
-                db=config_data["database"],
-                autocommit=True
-            )
-            return conn
-        except Exception as e:
-            # We don't want to raise here, we catch it in the command to give a friendly error
-            print(f"Error connecting to database: {e}")
-            return None
+        # Let exceptions bubble up so we can print the exact reason to Discord
+        conn = await aiomysql.connect(
+            host=config_data["host"],
+            port=config_data["port"],
+            user=config_data["user"],
+            password=config_data["password"],
+            db=config_data["database"],
+            autocommit=True
+        )
+        return conn
 
     @commands.command()
     async def rank(self, ctx: commands.Context, *, playername: str):
@@ -120,10 +116,10 @@ class NBZHCRank(commands.Cog):
         # 1. Provide an initial feedback message since DB queries might take a second
         # and we don't want the bot to seem unresponsive.
         async with ctx.typing():
-            conn = await self.get_db_connection()
-            
-            if not conn:
-                await ctx.send("Database connection could not be established. Please ask an admin to check the bot's configuration.")
+            try:
+                conn = await self.get_db_connection()
+            except Exception as e:
+                await ctx.send(f"Database connection could not be established. Please check your credentials using `[p]rankset`. \n**Error details:** `{type(e).__name__}: {e}`")
                 return
 
             try:
