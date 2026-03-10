@@ -203,7 +203,7 @@ class NBZHCRank(commands.Cog):
 
             # Survivor Stats
             survivor_stats = (
-                f"**Survivor Sills:** {player_data.get('survivor_kills', 0):,}\n"
+                f"**Survivor Kills:** {player_data.get('survivor_kills', 0):,}\n"
                 f"**Survivor Saves:** {player_data.get('survivor_saves', 0):,}"
             )
             embed.add_field(name="🏊 Survivor Interaction", value=survivor_stats, inline=True)
