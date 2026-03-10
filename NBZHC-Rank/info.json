@@ -1,0 +1,19 @@
+{
+    "name": "NBZHC-Rank",
+    "author": [
+        "keough99, Dabblecraft Dev Team"
+    ],
+    "description": "A rank system for NBZHC.",
+    "install_msg": "Thanks for installing NBZHC-Rank! Use [p]rankset to begin configuration.",
+    "short": "Rank system for NBZHC.",
+    "tags": [
+        "rank",
+        "nbzhc"
+    ],
+    "end_user_data_statement": "This cog stores Discord User IDs, Channel IDs, and Role IDs for configuration and in-memory tracking of active CAPTCHA attempts. This data is not shared.",
+    "min_bot_version": "3.5.0",
+    "max_bot_version": "3.9.9",
+    "requirements": [
+        "aiomysql"
+    ]
+}
