@@ -35,10 +35,11 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         self.config = config
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
             port_num = int(self.port.value)
         except ValueError:
-            await interaction.response.send_message("Port must be a valid number.", ephemeral=True)
+            await interaction.followup.send("Port must be a valid number.", ephemeral=True)
             return
 
         await self.config.host.set(self.host.value)
@@ -47,7 +48,7 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.password.set(self.password.value)
         await self.config.database.set(self.database.value)
 
-        await interaction.response.send_message("Database credentials have been saved successfully.", ephemeral=True)
+        await interaction.followup.send("Database credentials have been saved successfully.", ephemeral=True)
 
 
 class NBZHCRank(commands.Cog):
