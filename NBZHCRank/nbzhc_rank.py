@@ -42,6 +42,7 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
             await interaction.followup.send("Port must be a valid number.", ephemeral=True)
             return
 
+        # Use set() directly on the variables to store them in the root of the cog's global config
         await self.config.host.set(self.host.value)
         await self.config.port.set(port_num)
         await self.config.user.set(self.user.value)
@@ -57,10 +58,12 @@ class NBZHCRank(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=847392183, force_registration=True)
+        
+        # We need to register the defaults so they act as a base structure
         default_global = {
-            "host": "localhost",
+            "host": "",
             "port": 3306,
-            "user": "root",
+            "user": "",
             "password": "",
             "database": ""
         }
