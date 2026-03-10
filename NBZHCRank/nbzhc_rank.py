@@ -50,11 +50,12 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         print(f"DB: '{self.database.value}'")
 
         # Use set() directly on the variables to store them in the root of the cog's global config
-        await self.config.host.set(str(self.host.value))
-        await self.config.port.set(port_num)
-        await self.config.user.set(str(self.user.value))
-        await self.config.password.set(str(self.password.value))
-        await self.config.database.set(str(self.database.value))
+        # We use db_ prefix to avoid collisions with Redbot's built-in config groups like config.user()
+        await self.config.db_host.set(str(self.host.value))
+        await self.config.db_port.set(port_num)
+        await self.config.db_user.set(str(self.user.value))
+        await self.config.db_password.set(str(self.password.value))
+        await self.config.db_name.set(str(self.database.value))
         
         # Verify it saved
         saved_d = await self.config.all()
@@ -72,11 +73,11 @@ class NBZHCRank(commands.Cog):
         
         # We need to register the defaults so they act as a base structure
         default_global = {
-            "host": "",
-            "port": 3306,
-            "user": "",
-            "password": "",
-            "database": ""
+            "db_host": "",
+            "db_port": 3306,
+            "db_user": "",
+            "db_password": "",
+            "db_name": ""
         }
         self.config.register_global(**default_global)
 
@@ -110,16 +111,16 @@ class NBZHCRank(commands.Cog):
         config_data = await self.config.all()
         print(f"[NBZHCRank Debug] get_db_connection read: {config_data}")
         # Ensure all required fields are set
-        if not all([config_data.get("host"), config_data.get("user"), config_data.get("database")]):
+        if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
             raise ValueError(f"Database credentials are not fully configured. Config read: {config_data}")
 
         # Let exceptions bubble up so we can print the exact reason to Discord
         conn = await aiomysql.connect(
-            host=config_data["host"],
-            port=config_data["port"],
-            user=config_data["user"],
-            password=config_data["password"],
-            db=config_data["database"],
+            host=config_data["db_host"],
+            port=config_data["db_port"],
+            user=config_data["db_user"],
+            password=config_data["db_password"],
+            db=config_data["db_name"],
             autocommit=True
         )
         return conn
