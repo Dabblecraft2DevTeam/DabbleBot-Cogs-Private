@@ -43,14 +43,24 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
             await interaction.followup.send("Port must be a valid number.", ephemeral=True)
             return
 
+        # Print debug to terminal
+        print(f"[NBZHCRank Debug] Modal Submit:")
+        print(f"Host: '{self.host.value}'")
+        print(f"User: '{self.user.value}'")
+        print(f"DB: '{self.database.value}'")
+
         # Use set() directly on the variables to store them in the root of the cog's global config
         await self.config.host.set(str(self.host.value))
         await self.config.port.set(port_num)
         await self.config.user.set(str(self.user.value))
         await self.config.password.set(str(self.password.value))
         await self.config.database.set(str(self.database.value))
+        
+        # Verify it saved
+        saved_d = await self.config.all()
+        print(f"[NBZHCRank Debug] Saved Config State: {saved_d}")
 
-        await interaction.followup.send("Database credentials have been saved successfully.", ephemeral=True)
+        await interaction.followup.send("Database credentials have been saved successfully. Please check the bot's console for debug logs.", ephemeral=True)
 
 
 class NBZHCRank(commands.Cog):
@@ -98,9 +108,10 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
+        print(f"[NBZHCRank Debug] get_db_connection read: {config_data}")
         # Ensure all required fields are set
         if not all([config_data.get("host"), config_data.get("user"), config_data.get("database")]):
-            raise ValueError("Database credentials are not fully configured.")
+            raise ValueError(f"Database credentials are not fully configured. Config read: {config_data}")
 
         # Let exceptions bubble up so we can print the exact reason to Discord
         conn = await aiomysql.connect(
