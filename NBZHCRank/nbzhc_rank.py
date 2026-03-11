@@ -197,7 +197,7 @@ class NBZHCRank(commands.Cog):
             combat_stats_1 = (
                 f"**Player Kills:** {player_data.get('player_kills', 0):,}\n"
                 f"**Villager Kills:** {player_data.get('villager_kills', 0):,}\n"
-                f"**Deaths:** {player_data.get('deahts', 0):,}" # Using exact column name 'deahts' from prompt
+                f"**Deaths:** {player_data.get('deaths', 0):,}"
             )
             embed.add_field(name="⚔️ Combat", value=combat_stats_1, inline=True)
 
