@@ -219,29 +219,44 @@ class NBZHCRank(commands.Cog):
             )
             embed.add_field(name="💥 Damage Output", value=damage_stats, inline=False)
 
-            # Rank lookup map
+            # Rank lookup map (1 to 35)
+            # Extrapolated with enlisted, warrant, midshipmen, and officers based on standard naval gradations
             rank_map = {
-                0: "Seaman Apprentice",
-                1: "Seaman",
-                2: "Petty Officer Third Class",
-                3: "Petty Officer Second Class",
-                4: "Petty Officer First Class",
-                5: "Chief Petty Officer",
-                6: "Senior Chief Petty Officer",
-                7: "Master Chief Petty Officer",
-                8: "Warrant Officer",
-                9: "Chief Warrant Officer",
-                10: "Ensign",
-                11: "Lieutenant Junior Grade",
-                12: "Lieutenant",
-                13: "Lieutenant Commander",
-                14: "Commander",
-                15: "Captain",
-                16: "Rear Admiral Lower Half",
-                17: "Rear Admiral",
-                18: "Vice Admiral",
-                19: "Admiral",
-                20: "Fleet Admiral"
+                1: "Seaman Recruit",
+                2: "Seaman Apprentice",
+                3: "Seaman",
+                4: "Petty Officer Third Class",
+                5: "Petty Officer Second Class",
+                6: "Petty Officer First Class",
+                7: "Chief Petty Officer",
+                8: "Senior Chief Petty Officer",
+                9: "Master Chief Petty Officer",
+                10: "Command Master Chief Petty Officer",
+                11: "Fleet Master Chief Petty Officer",
+                12: "Force Master Chief Petty Officer",
+                13: "Master Chief Petty Officer of the Navy",
+                14: "Warrant Officer 1",
+                15: "Chief Warrant Officer 2",
+                16: "Chief Warrant Officer 3",
+                17: "Chief Warrant Officer 4",
+                18: "Chief Warrant Officer 5",
+                19: "Midshipman Fourth Class",
+                20: "Midshipman Third Class",
+                21: "Midshipman Second Class",
+                22: "Midshipman First Class",
+                23: "Officer Candidate",
+                24: "Ensign",
+                25: "Lieutenant Junior Grade",
+                26: "Lieutenant",
+                27: "Lieutenant Commander",
+                28: "Commander",
+                29: "Captain",
+                30: "Commodore",
+                31: "Rear Admiral (Lower Half)",
+                32: "Rear Admiral (Upper Half)",
+                33: "Vice Admiral",
+                34: "Admiral",
+                35: "Fleet Admiral"
             }
             # Fallback to "Unknown (ID: #)" if an unexpected rank ID appears
             raw_rank_id = player_data.get('hcn_rank_id', 0)
