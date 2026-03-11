@@ -218,6 +218,57 @@ class NBZHCRank(commands.Cog):
                 f"**Collision Damage:** {player_data.get('collision_dmg', 0):,}"
             )
             embed.add_field(name="💥 Damage Output", value=damage_stats, inline=False)
+
+            # Rank lookup map
+            rank_map = {
+                0: "Seaman Apprentice",
+                1: "Seaman",
+                2: "Petty Officer Third Class",
+                3: "Petty Officer Second Class",
+                4: "Petty Officer First Class",
+                5: "Chief Petty Officer",
+                6: "Senior Chief Petty Officer",
+                7: "Master Chief Petty Officer",
+                8: "Warrant Officer",
+                9: "Chief Warrant Officer",
+                10: "Ensign",
+                11: "Lieutenant Junior Grade",
+                12: "Lieutenant",
+                13: "Lieutenant Commander",
+                14: "Commander",
+                15: "Captain",
+                16: "Rear Admiral Lower Half",
+                17: "Rear Admiral",
+                18: "Vice Admiral",
+                19: "Admiral",
+                20: "Fleet Admiral"
+            }
+            # Fallback to "Unknown (ID: #)" if an unexpected rank ID appears
+            raw_rank_id = player_data.get('hcn_rank_id', 0)
+            rank_name = rank_map.get(raw_rank_id, f"Unknown (ID: {raw_rank_id})")
+
+            # Convert playtime from Milliseconds to Days, Hours, Minutes
+            raw_playtime_ms = player_data.get('total_time', 0)
+            if raw_playtime_ms > 0:
+                seconds = raw_playtime_ms // 1000
+                minutes = (seconds // 60) % 60
+                hours = (seconds // 3600) % 24
+                days = seconds // 86400
+                
+                parts = []
+                if days > 0: parts.append(f"{days}d")
+                if hours > 0: parts.append(f"{hours}h")
+                if minutes > 0: parts.append(f"{minutes}m")
+                playtime_str = " ".join(parts) if parts else "< 1m"
+            else:
+                playtime_str = "0m"
+
+            #Rank & Playtime
+            rank_playtime_stats = (
+                f"**Rank:** {rank_name}\n"
+                f"**Playtime:** {playtime_str}"
+            )
+            embed.add_field(name="🏅 Rank & Playtime", value=rank_playtime_stats, inline=True)
             
             # Add a footer with standard redbot avatar or just text
             embed.set_footer(text="Data provided by NBZHC Database")
