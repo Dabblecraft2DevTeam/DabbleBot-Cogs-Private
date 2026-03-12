@@ -1,6 +1,7 @@
 import discord
 from redbot.core import commands, Config
 import aiomysql
+import aiohttp
 
 class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
     host = discord.ui.TextInput(
@@ -153,6 +154,21 @@ class NBZHCRank(commands.Cog):
                     # Execute secure parameterized query to prevent SQL injection
                     await cur.execute("SELECT * FROM players WHERE name = %s", (playername,))
                     player_data = await cur.fetchone()
+
+                    # Fallback to Mojang API UUID lookup if player name is not found
+                    if not player_data:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(f"https://api.mojang.com/users/profiles/minecraft/{playername}") as resp:
+                                if resp.status == 200:
+                                    mojang_data = await resp.json()
+                                    uuid = mojang_data.get("id")
+                                    if uuid:
+                                        # Mojang API provides UUIDs without hyphens
+                                        formatted_uuid = f"{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}"
+                                        
+                                        # Check the players table mapping for this uuid (both formatted and unformatted)
+                                        await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
+                                        player_data = await cur.fetchone()
             except Exception as e:
                 await ctx.send(f"An error occurred while querying the database: `{e}`")
                 return
