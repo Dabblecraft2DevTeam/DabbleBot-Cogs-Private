@@ -10,26 +10,23 @@ import discord
 import speedtest
 from redbot.core import checks, commands
 
-old_ping = None
-
-
 class CustomPing(commands.Cog):
     """A more information rich ping message."""
 
     def __init__(self, bot):
         self.bot = bot
+        self.old_ping = None
 
     async def red_delete_data_for_user(self, **kwargs):
         return
 
     def cog_unload(self):
-        global old_ping
-        if old_ping:
+        if self.old_ping:
             try:
                 self.bot.remove_command("ping")
-            except:
+            except Exception:
                 pass
-            self.bot.add_command(old_ping)
+            self.bot.add_command(self.old_ping)
 
     @checks.bot_has_permissions(embed_links=True)
     @commands.cooldown(2, 5, commands.BucketType.user)
@@ -150,10 +147,3 @@ class CustomPing(commands.Cog):
         await ctx.send(embed=e)
 
 
-def setup(bot):
-    ping = CustomPing(bot)
-    global old_ping
-    old_ping = bot.get_command("ping")
-    if old_ping:
-        bot.remove_command(old_ping.name)
-    bot.add_cog(ping)
