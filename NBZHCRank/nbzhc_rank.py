@@ -58,10 +58,6 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.db_user.set(str(self.user.value))
         await self.config.db_password.set(str(self.password.value))
         await self.config.db_name.set(str(self.database.value))
-        
-        # Verify it saved
-        saved_d = await self.config.all()
-        print(f"[NBZHCRank Debug] Saved Config State: {saved_d}")
 
         # Delete the original prompt message
         try:
@@ -120,10 +116,9 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
-        print(f"[NBZHCRank Debug] get_db_connection read: {config_data}")
         # Ensure all required fields are set
         if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
-            raise ValueError(f"Database credentials are not fully configured. Config read: {config_data}")
+            raise ValueError("Database credentials are not fully configured.")
 
         # Let exceptions bubble up so we can print the exact reason to Discord
         conn = await aiomysql.connect(
