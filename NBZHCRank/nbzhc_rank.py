@@ -59,10 +59,6 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.db_password.set(str(self.password.value))
         await self.config.db_name.set(str(self.database.value))
         
-        # Verify it saved
-        saved_d = await self.config.all()
-        print(f"[NBZHCRank Debug] Saved Config State: {saved_d}")
-
         # Delete the original prompt message
         try:
             if self.msg:
@@ -120,12 +116,11 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
-        print(f"[NBZHCRank Debug] get_db_connection read: {config_data}")
         # Ensure all required fields are set
         if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
-            raise ValueError(f"Database credentials are not fully configured. Config read: {config_data}")
+            raise ValueError("Database credentials are not fully configured.")
 
-        # Let exceptions bubble up so we can print the exact reason to Discord
+        # Let exceptions bubble up so we can log them internally
         conn = await aiomysql.connect(
             host=config_data["db_host"],
             port=config_data["db_port"],
@@ -146,7 +141,8 @@ class NBZHCRank(commands.Cog):
             try:
                 conn = await self.get_db_connection()
             except Exception as e:
-                await ctx.send(f"Database connection could not be established. Please check your credentials using `[p]rankset`. \n**Error details:** `{type(e).__name__}: {e}`")
+                print(f"[NBZHCRank Error] Connection failed: {e}")
+                await ctx.send("Database connection could not be established. Please check your credentials using `[p]rankset`.")
                 return
 
             try:
@@ -170,7 +166,8 @@ class NBZHCRank(commands.Cog):
                                         await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
                                         player_data = await cur.fetchone()
             except Exception as e:
-                await ctx.send(f"An error occurred while querying the database: `{e}`")
+                print(f"[NBZHCRank Error] Database query failed: {e}")
+                await ctx.send("An error occurred while querying the database. Please try again later.")
                 return
             finally:
                 conn.close()
