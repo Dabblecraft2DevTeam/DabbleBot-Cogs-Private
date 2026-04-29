@@ -1,0 +1,4 @@
+## 2024-05-24 - [Information Disclosure via Raw Exception and Config Logs]
+**Vulnerability:** The application was logging raw configurations and exception messages, exposing sensitive database connection strings directly to users via error responses and debugging outputs.
+**Learning:** Returning `config.all()` or unhandled exception details (`type(e).__name__: {e}`) in public-facing channels or logs often inadvertently dumps database credentials (like username, password, host).
+**Prevention:** Always use generic, sanitized error messages for the client. Do not directly dump config dictionaries or exception strings; handle exceptions securely and safely.
