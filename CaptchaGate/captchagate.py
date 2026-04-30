@@ -215,8 +215,7 @@ class CaptchaGate(commands.Cog):
                 try:
                     # Clear the message ID immediately from the data to prevent re-attempts at deletion
                     member_data[key] = None 
-                    message = await channel.fetch_message(message_id)
-                    await message.delete()
+                    await channel.get_partial_message(message_id).delete()
                 except Exception:
                     pass 
 
