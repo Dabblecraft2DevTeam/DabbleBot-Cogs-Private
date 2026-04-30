@@ -60,7 +60,15 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.db_name.set(str(self.database.value))
         
         # Verify it saved
+<<<<<<< Updated upstream
+        saved_d = await self.config.all()
+        safe_saved_d = saved_d.copy()
+        if "db_password" in safe_saved_d:
+            safe_saved_d["db_password"] = "***REDACTED***"
+        print(f"[NBZHCRank Debug] Saved Config State: {safe_saved_d}")
+=======
         # Deleted logging config.all() to prevent password leak
+>>>>>>> Stashed changes
 
         # Delete the original prompt message
         try:
@@ -119,7 +127,14 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
+<<<<<<< Updated upstream
+        safe_config = config_data.copy()
+        if "db_password" in safe_config:
+            safe_config["db_password"] = "***REDACTED***"
+        print(f"[NBZHCRank Debug] get_db_connection read: {safe_config}")
+=======
         # Deleted logging config.all() to prevent password leak
+>>>>>>> Stashed changes
         # Ensure all required fields are set
         if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
             raise ValueError("Database credentials are not fully configured.")
