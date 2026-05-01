@@ -1,0 +1,4 @@
+## 2026-05-01 - [Leaking Exception and Database details to Users]
+**Vulnerability:** Raw exception details from MySQL connections and SQL queries were returned to users in Discord via `ctx.send`. This can leak sensitive configuration like database passwords, server IP addresses, or internal database schemas. In addition, sensitive state loaded from `config.all()` was being logged to stdout.
+**Learning:** Returning `Exception` objects or their messages directly to users in production is an information disclosure vulnerability.
+**Prevention:** Catch specific exceptions internally for logging and present generic, safe error messages to end-users (e.g., "Database connection could not be established"). Avoid printing configurations loaded via Red-DiscordBot's Config object, even if an attempt to sanitize specific fields is made, as other sensitive fields might be introduced over time.

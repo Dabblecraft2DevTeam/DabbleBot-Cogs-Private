@@ -59,13 +59,7 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.db_password.set(str(self.password.value))
         await self.config.db_name.set(str(self.database.value))
         
-        # Verify it saved
-        saved_d = await self.config.all()
-        safe_saved_d = saved_d.copy()
-        if "db_password" in safe_saved_d:
-            safe_saved_d["db_password"] = "***REDACTED***"
-        print(f"[NBZHCRank Debug] Saved Config State: {safe_saved_d}")
-
+        # Security: Do not print or log config.all() to prevent accidental leakage of sensitive data
         # Delete the original prompt message
         try:
             if self.msg:
@@ -123,10 +117,8 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
-        safe_config = config_data.copy()
-        if "db_password" in safe_config:
-            safe_config["db_password"] = "***REDACTED***"
-        print(f"[NBZHCRank Debug] get_db_connection read: {safe_config}")
+        # Security: Do not print or log config.all() to prevent accidental leakage of sensitive data
+
         # Ensure all required fields are set
         if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
             raise ValueError("Database credentials are not fully configured.")
@@ -152,7 +144,8 @@ class NBZHCRank(commands.Cog):
             try:
                 conn = await self.get_db_connection()
             except Exception as e:
-                await ctx.send(f"Database connection could not be established. Please check your credentials using `[p]rankset`. \n**Error details:** `{type(e).__name__}: {e}`")
+                # Security: Fail securely and do not leak exception details to users
+                await ctx.send("Database connection could not be established. Please check your credentials using `[p]rankset`.")
                 return
 
             try:
@@ -176,7 +169,8 @@ class NBZHCRank(commands.Cog):
                                         await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
                                         player_data = await cur.fetchone()
             except Exception as e:
-                await ctx.send(f"An error occurred while querying the database: `{e}`")
+                # Security: Fail securely and do not leak exception details to users
+                await ctx.send("An error occurred while querying the database. Please try again later or contact an administrator.")
                 return
             finally:
                 conn.close()
