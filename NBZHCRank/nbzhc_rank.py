@@ -152,7 +152,8 @@ class NBZHCRank(commands.Cog):
             try:
                 conn = await self.get_db_connection()
             except Exception as e:
-                await ctx.send(f"Database connection could not be established. Please check your credentials using `[p]rankset`. \n**Error details:** `{type(e).__name__}: {e}`")
+                print(f"[NBZHCRank Security] Database connection failed: {type(e).__name__}: {e}")
+                await ctx.send("Database connection could not be established. Please check your configuration.")
                 return
 
             try:
@@ -176,7 +177,8 @@ class NBZHCRank(commands.Cog):
                                         await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
                                         player_data = await cur.fetchone()
             except Exception as e:
-                await ctx.send(f"An error occurred while querying the database: `{e}`")
+                print(f"[NBZHCRank Security] Database query error: {type(e).__name__}: {e}")
+                await ctx.send("An error occurred while querying the database. Please try again later.")
                 return
             finally:
                 conn.close()
