@@ -31,6 +31,8 @@ class NameUpdate(commands.Cog):
                 print(f"Updated voice channel name to: {new_name}")
 
     @commands.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
     async def create_voice_channel(self, ctx):
         """Manually create a voice channel with the current name."""
         guild = ctx.guild
@@ -38,6 +40,8 @@ class NameUpdate(commands.Cog):
         await ctx.send(f"Voice channel created: {self.voice_channel.name}")
 
     @commands.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
     async def set_channel_names(self, ctx, *names):
         """Set custom list of channel names."""
         if names:
@@ -47,12 +51,16 @@ class NameUpdate(commands.Cog):
             await ctx.send("Please provide a list of names.")
 
     @commands.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
     async def stop_name_update(self, ctx):
         """Stop the name updating task."""
         self.update_name.stop()
         await ctx.send("Voice channel name updating stopped.")
 
     @commands.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
     async def start_name_update(self, ctx):
         """Start the name updating task."""
         self.update_name.start()

@@ -46,6 +46,8 @@ class DateChannelCog(commands.Cog):
         await asyncio.sleep(wait_time)  # Sleep until the next 6-hour interval
 
     @commands.command()
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
     async def create_date_channel(self, ctx):
         """Create a 'date-channel' if it does not exist in the current guild."""
         guild = ctx.guild
@@ -64,12 +66,14 @@ class DateChannelCog(commands.Cog):
                 await ctx.send(f"Failed to create channel: {e}")
 
     @commands.command()
+    @commands.is_owner()
     async def start_date_update(self, ctx):
         """Manually trigger the first update of the voice channel."""
         await self.channel_update()
         await ctx.send("Date update task has been started.")
 
     @commands.command()
+    @commands.is_owner()
     async def stop_date_update(self, ctx):
         """Stop the background task."""
         self.channel_update.cancel()
