@@ -2,6 +2,7 @@ import discord
 from redbot.core import commands, Config
 import aiomysql
 import aiohttp
+import re
 
 class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
     host = discord.ui.TextInput(
@@ -164,18 +165,20 @@ class NBZHCRank(commands.Cog):
 
                     # Fallback to Mojang API UUID lookup if player name is not found
                     if not player_data:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(f"https://api.mojang.com/users/profiles/minecraft/{playername}") as resp:
-                                if resp.status == 200:
-                                    mojang_data = await resp.json()
-                                    uuid = mojang_data.get("id")
-                                    if uuid:
-                                        # Mojang API provides UUIDs without hyphens
-                                        formatted_uuid = f"{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}"
-                                        
-                                        # Check the players table mapping for this uuid (both formatted and unformatted)
-                                        await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
-                                        player_data = await cur.fetchone()
+                        # Validate playername to prevent SSRF or Path Traversal
+                        if re.match(r"^[a-zA-Z0-9_]{1,16}$", playername):
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(f"https://api.mojang.com/users/profiles/minecraft/{playername}") as resp:
+                                    if resp.status == 200:
+                                        mojang_data = await resp.json()
+                                        uuid = mojang_data.get("id")
+                                        if uuid:
+                                            # Mojang API provides UUIDs without hyphens
+                                            formatted_uuid = f"{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}"
+
+                                            # Check the players table mapping for this uuid (both formatted and unformatted)
+                                            await cur.execute("SELECT * FROM players WHERE uuid = %s OR uuid = %s", (uuid, formatted_uuid))
+                                            player_data = await cur.fetchone()
             except Exception as e:
                 print(f"[NBZHCRank Security] Database query error: {type(e).__name__}: {e}")
                 await ctx.send("An error occurred while querying the database. Please try again later.")
