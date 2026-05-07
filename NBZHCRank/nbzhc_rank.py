@@ -2,6 +2,7 @@ import discord
 from redbot.core import commands, Config
 import aiomysql
 import aiohttp
+import re
 
 class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
     host = discord.ui.TextInput(
@@ -146,6 +147,11 @@ class NBZHCRank(commands.Cog):
     async def rank(self, ctx: commands.Context, *, playername: str):
         """Fetch and display rank statistics for a specific player."""
         
+        # Security: Validate playername to prevent SSRF/Path Traversal
+        if not re.match(r'^[a-zA-Z0-9_]{1,16}$', playername):
+            await ctx.send("Invalid player name format. Please provide a valid Minecraft username.")
+            return
+
         # 1. Provide an initial feedback message since DB queries might take a second
         # and we don't want the bot to seem unresponsive.
         async with ctx.typing():
