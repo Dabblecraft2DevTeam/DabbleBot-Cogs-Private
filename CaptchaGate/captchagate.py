@@ -656,12 +656,16 @@ class CaptchaGate(commands.Cog):
     @captchaset.command(name="welcometitle")
     async def captchaset_welcometitle(self, ctx: commands.Context, *, title: str):
         """Sets the title for the public welcome message embed. Use {user} for mention."""
+        if len(title) > 256:
+            return await ctx.send("❌ Title is too long. Discord allows a maximum of 256 characters for an embed title.")
         await self.config.guild(ctx.guild).welcome_embed_title.set(title)
         await ctx.send(f"✅ Public welcome message title set to: `{title}`")
 
     @captchaset.command(name="welcomedesc")
     async def captchaset_welcomedesc(self, ctx: commands.Context, *, description: str):
         """Sets the description for the public welcome message embed. Use {user} for mention."""
+        if len(description) > 4096:
+            return await ctx.send("❌ Description is too long. Discord allows a maximum of 4096 characters for an embed description.")
         await self.config.guild(ctx.guild).welcome_embed_desc.set(description)
         await ctx.send(f"✅ Public welcome message description set.")
 
@@ -684,8 +688,15 @@ class CaptchaGate(commands.Cog):
         <correct_option>: The text of the correct option (must be one of the options).
         <options>: A comma-separated list of all possible option texts (e.g., "Cat, Dog, Bird").
         """
+        if len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` is too long. Discord allows a maximum of 2048 characters for an image URL.")
+
         options_list = [o.strip() for o in options.split(',')]
         
+        for option in options_list:
+            if len(option) > 80:
+                return await ctx.send(f"❌ Option `{option}` is too long. Discord allows a maximum of 80 characters for a button label.")
+
         if correct_option not in options_list:
             return await ctx.send("❌ The `correct_option` must be present in the list of `options`.")
             
