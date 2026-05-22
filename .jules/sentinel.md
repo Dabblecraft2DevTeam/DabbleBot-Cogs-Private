@@ -10,3 +10,8 @@
 **Vulnerability:** The `rank` command in `NBZHCRank/nbzhc_rank.py` interpolated unvalidated user input (`playername`) directly into a Mojang API URL (`https://api.mojang.com/users/profiles/minecraft/{playername}`). This could allow an attacker to use Path Traversal characters (e.g., `../`, `%2e%2e%2f`) or unexpected URL components to manipulate the API request, leading to Server-Side Request Forgery (SSRF) or unexpected application behavior.
 **Learning:** Even when interpolating user input into seemingly "safe" external API URLs, unvalidated input can alter the intended path or query parameters, creating SSRF or Path Traversal risks.
 **Prevention:** Always strictly validate and sanitize user input against an allowlist pattern (e.g., regex `^[a-zA-Z0-9_]{1,16}$` for Minecraft usernames) *before* interpolating it into any URLs or external system requests.
+
+## 2024-05-22 - Missing Embed Validation
+**Vulnerability:** Discord strictly limits embed parameters (title: 256, description: 4096, url: 2048, button label: 80). Using unfiltered user input for these properties can lead to a Self-DoS, where the bot continuously throws a 400 Bad Request error.
+**Learning:** Always validate the length of user inputs when mapping them to constrained fields in APIs like Discord's UI components.
+**Prevention:** Add explicit length checks returning an error message for configuration commands that set embed parameters.
