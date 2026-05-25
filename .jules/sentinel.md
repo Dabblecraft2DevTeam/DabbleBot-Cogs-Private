@@ -10,3 +10,8 @@
 **Vulnerability:** The `rank` command in `NBZHCRank/nbzhc_rank.py` interpolated unvalidated user input (`playername`) directly into a Mojang API URL (`https://api.mojang.com/users/profiles/minecraft/{playername}`). This could allow an attacker to use Path Traversal characters (e.g., `../`, `%2e%2e%2f`) or unexpected URL components to manipulate the API request, leading to Server-Side Request Forgery (SSRF) or unexpected application behavior.
 **Learning:** Even when interpolating user input into seemingly "safe" external API URLs, unvalidated input can alter the intended path or query parameters, creating SSRF or Path Traversal risks.
 **Prevention:** Always strictly validate and sanitize user input against an allowlist pattern (e.g., regex `^[a-zA-Z0-9_]{1,16}$` for Minecraft usernames) *before* interpolating it into any URLs or external system requests.
+
+## 2024-05-24 - [Information Exposure via Exception Printing]
+**Vulnerability:** The NBZHCRank cog exposed sensitive database credentials (e.g., passwords) by interpolating the raw exception object (`{e}`) directly into a `print()` statement during database connection and query failures. If logs were viewed or captured, credentials could be leaked.
+**Learning:** Even internal logging or printing can be a source of information exposure if raw exception objects from database drivers are not sanitized.
+**Prevention:** Always log exceptions securely by using standard logging frameworks (`logging.error`) with `exc_info=False` (unless debugging locally) and only log the exception type name (e.g., `type(e).__name__`) instead of the full exception message when handling sensitive operations like database connections.
