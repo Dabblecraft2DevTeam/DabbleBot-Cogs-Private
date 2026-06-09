@@ -1,6 +1,7 @@
 import asyncio
 import time 
 import random
+import urllib.parse
 from typing import Literal, Optional
 
 import discord
@@ -684,6 +685,13 @@ class CaptchaGate(commands.Cog):
         <correct_option>: The text of the correct option (must be one of the options).
         <options>: A comma-separated list of all possible option texts (e.g., "Cat, Dog, Bird").
         """
+        # Validate URL to prevent SSRF and Discord embed errors
+        if len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` must be 2048 characters or fewer.")
+        parsed_url = urllib.parse.urlparse(image_url)
+        if parsed_url.scheme not in ["http", "https"]:
+            return await ctx.send("❌ The `image_url` must use the `http` or `https` scheme.")
+
         options_list = [o.strip() for o in options.split(',')]
         
         if correct_option not in options_list:
