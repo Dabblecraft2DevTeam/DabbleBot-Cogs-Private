@@ -684,6 +684,12 @@ class CaptchaGate(commands.Cog):
         <correct_option>: The text of the correct option (must be one of the options).
         <options>: A comma-separated list of all possible option texts (e.g., "Cat, Dog, Bird").
         """
+        # Security: Validate image URL scheme and length to prevent SSRF and Self-DoS
+        if not image_url.startswith(("http://", "https://")):
+            return await ctx.send("❌ The `image_url` must start with `http://` or `https://`.")
+        if len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` exceeds the maximum allowed length of 2048 characters.")
+
         options_list = [o.strip() for o in options.split(',')]
         
         if correct_option not in options_list:
