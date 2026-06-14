@@ -686,6 +686,12 @@ class CaptchaGate(commands.Cog):
         """
         options_list = [o.strip() for o in options.split(',')]
         
+        # Security Validation for SSRF and Self-DoS
+        if not image_url.startswith(("http://", "https://")):
+            return await ctx.send("❌ The `image_url` must start with `http://` or `https://`.")
+        if len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` exceeds the Discord limit of 2048 characters.")
+
         if correct_option not in options_list:
             return await ctx.send("❌ The `correct_option` must be present in the list of `options`.")
             
