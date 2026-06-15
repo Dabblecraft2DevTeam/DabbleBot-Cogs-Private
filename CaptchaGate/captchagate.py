@@ -656,12 +656,16 @@ class CaptchaGate(commands.Cog):
     @captchaset.command(name="welcometitle")
     async def captchaset_welcometitle(self, ctx: commands.Context, *, title: str):
         """Sets the title for the public welcome message embed. Use {user} for mention."""
+        if len(title) > 256:
+            return await ctx.send("❌ Title cannot exceed 256 characters.")
         await self.config.guild(ctx.guild).welcome_embed_title.set(title)
         await ctx.send(f"✅ Public welcome message title set to: `{title}`")
 
     @captchaset.command(name="welcomedesc")
     async def captchaset_welcomedesc(self, ctx: commands.Context, *, description: str):
         """Sets the description for the public welcome message embed. Use {user} for mention."""
+        if len(description) > 4096:
+            return await ctx.send("❌ Description cannot exceed 4096 characters.")
         await self.config.guild(ctx.guild).welcome_embed_desc.set(description)
         await ctx.send(f"✅ Public welcome message description set.")
 
@@ -684,7 +688,12 @@ class CaptchaGate(commands.Cog):
         <correct_option>: The text of the correct option (must be one of the options).
         <options>: A comma-separated list of all possible option texts (e.g., "Cat, Dog, Bird").
         """
+        if not (image_url.startswith("http://") or image_url.startswith("https://")) or len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` must be a valid HTTP/HTTPS URL and under 2048 characters.")
+
         options_list = [o.strip() for o in options.split(',')]
+        if any(len(opt) > 80 for opt in options_list):
+            return await ctx.send("❌ Each option must be 80 characters or fewer.")
         
         if correct_option not in options_list:
             return await ctx.send("❌ The `correct_option` must be present in the list of `options`.")
