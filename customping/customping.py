@@ -38,7 +38,6 @@ class CustomPing(commands.Cog):
         end = time.monotonic()
         totalPing = round((end - start) * 1000, 2)
         e = discord.Embed(title="Pinging.. :calling:", description=f"Overall Latency: {totalPing}ms")
-        await asyncio.sleep(0.25)
         try:
             await message.edit(content=None, embed=e)
         except discord.NotFound:
@@ -46,7 +45,6 @@ class CustomPing(commands.Cog):
 
         botPing = round(self.bot.latency * 1000, 2)
         e.description = e.description + f"\nDiscord WebSocket Latency: {botPing}ms"
-        await asyncio.sleep(0.25)
 
         averagePing = (botPing + totalPing) / 2
         if averagePing >= 1000:
@@ -62,12 +60,11 @@ class CustomPing(commands.Cog):
         except discord.NotFound:
             return
 
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         loop = asyncio.get_event_loop()
         try:
             s = speedtest.Speedtest(secure=True)
-            await loop.run_in_executor(executor, s.get_servers)
-            await loop.run_in_executor(executor, s.get_best_server)
+            await loop.run_in_executor(None, s.get_servers)
+            await loop.run_in_executor(None, s.get_best_server)
         except speedtest.ConfigRetrievalError:
             return
         else:
@@ -76,7 +73,6 @@ class CustomPing(commands.Cog):
 
             e.title = "Pong! :satellite_orbital:"
             e.description = e.description + f"\nHost Latency: {hostPing}ms"
-            await asyncio.sleep(0.25)
             try:
                 await message.edit(embed=e)
             except discord.NotFound:
@@ -98,7 +94,6 @@ class CustomPing(commands.Cog):
         send_end = time.monotonic()
         send_ping = round((send_end - send_start) * 1000, 2)
         e.description += f"\nSend Latency: {send_ping}ms"
-        await asyncio.sleep(0.25)
 
         edit_start = time.monotonic()
         try:
@@ -120,7 +115,6 @@ class CustomPing(commands.Cog):
         e.color = color
         e.title = "Pong! :satellite_orbital:"
 
-        await asyncio.sleep(0.25)
         try:
             await message.edit(embed=e)
         except discord.NotFound:
