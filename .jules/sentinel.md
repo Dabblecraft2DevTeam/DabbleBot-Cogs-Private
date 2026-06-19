@@ -14,3 +14,8 @@
 **Vulnerability:** `CaptchaGate/captchagate.py` lacked validation for external image URLs (`image_url`) and text limits (`options_list`, `captchaset_welcometitle`, `captchaset_welcomedesc`) provided by admins. This missing embed validation can lead to Discord API 400 errors (Self-DoS) and unvalidated URLs pose an SSRF risk via Discord's media proxy.
 **Learning:** Always validate external resources strictly (e.g., scheme `http://` or `https://` for image URLs) and enforce character limits before they are sent to Discord to prevent bot failures and proxy exploits.
 **Prevention:** Implement strict length checking based on Discord API limits (e.g., embed titles <= 256, descriptions <= 4096, URLs <= 2048, and button labels <= 80 chars). Ensure URL inputs enforce a strict scheme allowlist.
+
+## 2024-06-19 - [CRITICAL] Fix Disk I/O DoS Vulnerability in Event Handlers
+**Vulnerability:** A Denial of Service (DoS) vulnerability existed in `CaptchaGate.on_member_join` where fetching and updating the least recently used (LRU) CAPTCHA challenge caused blocking disk I/O via the config storage mechanism. A flood of members joining could freeze the asynchronous event loop due to these disk writes.
+**Learning:** Red-DiscordBot's `Config` is I/O-bound. Performing configuration writes for high-frequency events (like `on_member_join`) can cause performance bottlenecks and open up self-DoS vectors.
+**Prevention:** Use an in-memory cache dictionary (e.g. `self._challenge_usage_cache`) initialized in the cog's `__init__` to store and update timestamps or frequently mutating state, instead of repeatedly hitting config storage in event handlers.
