@@ -184,6 +184,9 @@ class CaptchaGate(commands.Cog):
         
         # Tracks {(guild_id, member_id): {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
         self.active_captchas = {} 
+        # Caches the last_used timestamp of challenges to prevent I/O blocking
+        # {(guild_id, challenge_id): float}
+        self._challenge_usage_cache = {}
         self.kick_task = self.kick_timed_out_users.start()
 
     def cog_unload(self):
@@ -342,7 +345,14 @@ class CaptchaGate(commands.Cog):
         challenge_items = list(challenges.items())
         
         # Sort the challenges by the 'last_used' timestamp (oldest first, default to 0 if not set)
-        sorted_challenges = sorted(challenge_items, key=lambda item: item[1].get("last_used", 0))
+        # We check the memory cache first, then fallback to the config timestamp
+        def get_last_used(item):
+            cid = item[0]
+            cdata = item[1]
+            cache_key = (member.guild.id, cid)
+            return self._challenge_usage_cache.get(cache_key, cdata.get("last_used", 0))
+
+        sorted_challenges = sorted(challenge_items, key=get_last_used)
 
         # Take the top N (e.g., 3) least recently used challenges
         top_n = 3
@@ -352,10 +362,8 @@ class CaptchaGate(commands.Cog):
         # If less than N challenges exist, it just chooses from the existing pool
         selected_challenge_id, challenge = random.choice(least_used_pool)
         
-        # UPDATE CONFIG: Mark the selected challenge as used now
-        async with self.config.guild(member.guild).challenges() as challenges_config:
-            # Note: This updates the guild config when the challenge is chosen, not when it's completed.
-            challenges_config[selected_challenge_id]["last_used"] = time.time()
+        # UPDATE CACHE: Mark the selected challenge as used now in memory only to prevent I/O DoS
+        self._challenge_usage_cache[(member.guild.id, selected_challenge_id)] = time.time()
         
         # Extract data from the selected challenge
         image_url = challenge["image_url"]
