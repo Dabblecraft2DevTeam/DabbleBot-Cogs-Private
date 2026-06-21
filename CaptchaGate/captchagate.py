@@ -184,6 +184,8 @@ class CaptchaGate(commands.Cog):
         
         # Tracks {(guild_id, member_id): {"start_time": float, "attempts": int, "message_id": int | "public_message_id": int | "channel_id": int | "error_message_id": int}}
         self.active_captchas = {} 
+        # Tracks {(guild_id, challenge_id): float} for least-recently-used challenge selection
+        self._challenge_last_used = {}
         self.kick_task = self.kick_timed_out_users.start()
 
     def cog_unload(self):
@@ -342,7 +344,11 @@ class CaptchaGate(commands.Cog):
         challenge_items = list(challenges.items())
         
         # Sort the challenges by the 'last_used' timestamp (oldest first, default to 0 if not set)
-        sorted_challenges = sorted(challenge_items, key=lambda item: item[1].get("last_used", 0))
+        # Using in-memory cache to prevent I/O bottleneck
+        sorted_challenges = sorted(
+            challenge_items,
+            key=lambda item: self._challenge_last_used.get((member.guild.id, item[0]), item[1].get("last_used", 0))
+        )
 
         # Take the top N (e.g., 3) least recently used challenges
         top_n = 3
@@ -352,10 +358,9 @@ class CaptchaGate(commands.Cog):
         # If less than N challenges exist, it just chooses from the existing pool
         selected_challenge_id, challenge = random.choice(least_used_pool)
         
-        # UPDATE CONFIG: Mark the selected challenge as used now
-        async with self.config.guild(member.guild).challenges() as challenges_config:
-            # Note: This updates the guild config when the challenge is chosen, not when it's completed.
-            challenges_config[selected_challenge_id]["last_used"] = time.time()
+        # Mark the selected challenge as used in memory instead of writing to config
+        # to prevent Self-DoS via I/O bound database updates in high frequency join events
+        self._challenge_last_used[(member.guild.id, selected_challenge_id)] = time.time()
         
         # Extract data from the selected challenge
         image_url = challenge["image_url"]
@@ -723,7 +728,8 @@ class CaptchaGate(commands.Cog):
         output = []
         for cid, c in challenges.items():
             # Display last used time in a readable format
-            last_used_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(c.get("last_used", 0)))
+            last_used_ts = self._challenge_last_used.get((ctx.guild.id, cid), c.get("last_used", 0))
+            last_used_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_used_ts))
             output.append(f"**{cid}**: Correct: `{c['correct_option']}` | Last Used: `{last_used_time}` | Options: {humanize_list(c['options'])}")
         
         pages = await self.bot.formatter.format_list_neatly(output)
