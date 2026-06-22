@@ -14,3 +14,8 @@
 **Vulnerability:** `CaptchaGate/captchagate.py` lacked validation for external image URLs (`image_url`) and text limits (`options_list`, `captchaset_welcometitle`, `captchaset_welcomedesc`) provided by admins. This missing embed validation can lead to Discord API 400 errors (Self-DoS) and unvalidated URLs pose an SSRF risk via Discord's media proxy.
 **Learning:** Always validate external resources strictly (e.g., scheme `http://` or `https://` for image URLs) and enforce character limits before they are sent to Discord to prevent bot failures and proxy exploits.
 **Prevention:** Implement strict length checking based on Discord API limits (e.g., embed titles <= 256, descriptions <= 4096, URLs <= 2048, and button labels <= 80 chars). Ensure URL inputs enforce a strict scheme allowlist.
+
+## 2024-06-22 - Information Leakage via Debug Prints and Exception Handling
+**Vulnerability:** Debug print statements in `NBZHCRank/nbzhc_rank.py` were logging user-provided configuration values (like database host, user, and database names) to standard output. Additionally, raw database connection and query exceptions (`Exception as e`) were being fully logged.
+**Learning:** Leaving debug print statements that log user-provided configuration values or full exception objects can expose sensitive information (like backend structure, configuration data, and connection strings) in unauthenticated server standard output logs or error trackers.
+**Prevention:** Remove debug prints that log user input or configuration. When logging exceptions, only log the exception type name via `type(e).__name__` instead of the full exception object, and ensure error messages are properly sanitized before presentation or logging.
