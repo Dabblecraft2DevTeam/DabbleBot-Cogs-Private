@@ -1,43 +1,47 @@
-from redbot.core import commands
+from redbot.core import commands, Config
 from discord.ext import tasks
 import discord
 
 class NameUpdate(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.channel_name_list = [
-            "Welcome Room", "Chill Zone", "Lounge", "Gaming Room", "Music Time", "Study Area"
-        ]
-        self.current_name_index = 0
-        self.voice_channel = None
-        self.update_name.start()  # Start the periodic task
+        # Security: Use Config to prevent cross-guild state contamination (IDOR)
+        self.config = Config.get_conf(self, identifier=837264823, force_registration=True)
+        self.config.register_guild(
+            names=["Welcome Room", "Chill Zone", "Lounge", "Gaming Room", "Music Time", "Study Area"],
+            index=0,
+            channel_id=None
+        )
+        self.update_name.start()
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        # Find or create the voice channel
-        guild = self.bot.guilds[0]  # Assuming the bot is only in one server
-        self.voice_channel = discord.utils.get(guild.voice_channels, name=self.channel_name_list[self.current_name_index])
-        if not self.voice_channel:
-            self.voice_channel = await guild.create_voice_channel(self.channel_name_list[self.current_name_index])
-        print(f"Voice Channel '{self.voice_channel.name}' is ready.")
+    def cog_unload(self):
+        self.update_name.cancel()
 
-    @tasks.loop(minutes=5)  # Update every 5 minutes (can be adjusted)
+    @tasks.loop(minutes=5)
     async def update_name(self):
-        if self.voice_channel:
-            self.current_name_index = (self.current_name_index + 1) % len(self.channel_name_list)
-            new_name = self.channel_name_list[self.current_name_index]
-            if self.voice_channel.name != new_name:
-                await self.voice_channel.edit(name=new_name)
-                print(f"Updated voice channel name to: {new_name}")
+        for guild in self.bot.guilds:
+            data = await self.config.guild(guild).all()
+            channel = guild.get_channel(data["channel_id"]) if data["channel_id"] else None
+            if channel and data["names"]:
+                idx = (data["index"] + 1) % len(data["names"])
+                await self.config.guild(guild).index.set(idx)
+                new_name = data["names"][idx][:100]  # Prevent API error (100 char limit)
+                if channel.name != new_name:
+                    try:
+                        await channel.edit(name=new_name)
+                    except discord.HTTPException:
+                        pass
 
     @commands.command()
     @commands.guild_only()
     @commands.admin_or_permissions(manage_channels=True)
     async def create_voice_channel(self, ctx):
         """Manually create a voice channel with the current name."""
-        guild = ctx.guild
-        self.voice_channel = await guild.create_voice_channel(self.channel_name_list[self.current_name_index])
-        await ctx.send(f"Voice channel created: {self.voice_channel.name}")
+        data = await self.config.guild(ctx.guild).all()
+        if data["names"]:
+            channel = await ctx.guild.create_voice_channel(data["names"][data["index"]][:100])
+            await self.config.guild(ctx.guild).channel_id.set(channel.id)
+            await ctx.send(f"Voice channel created: {channel.name}")
 
     @commands.command()
     @commands.guild_only()
@@ -45,8 +49,11 @@ class NameUpdate(commands.Cog):
     async def set_channel_names(self, ctx, *names):
         """Set custom list of channel names."""
         if names:
-            self.channel_name_list = list(names)
-            await ctx.send(f"Updated channel names to: {', '.join(self.channel_name_list)}")
+            # Security: Validate input length
+            valid_names = [n[:100] for n in names]
+            await self.config.guild(ctx.guild).names.set(valid_names)
+            await self.config.guild(ctx.guild).index.set(0)
+            await ctx.send(f"Updated channel names to: {', '.join(valid_names)}")
         else:
             await ctx.send("Please provide a list of names.")
 
@@ -67,4 +74,4 @@ class NameUpdate(commands.Cog):
         await ctx.send("Voice channel name updating started.")
 
 async def setup(bot):
-    await bot.add_cog(NmaeUpdate(bot))
+    await bot.add_cog(NameUpdate(bot))
