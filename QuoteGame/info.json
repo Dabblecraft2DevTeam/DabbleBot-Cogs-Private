@@ -1,0 +1,11 @@
+{
+    "author": ["Antigravity"],
+    "install_msg": "Thanks for installing QuoteGame! Load it and use `[p]quotegame` to set up.",
+    "name": "QuoteGame",
+    "short": "A weekly fill-in-the-blank quote game for your server.",
+    "description": "Binds to a channel and posts a fill-in-the-blank quote game every week. Users submit 1-word answers and vote on the best one.",
+    "tags": ["game", "quotes", "fun"],
+    "requirements": [],
+    "min_bot_version": "3.4.0",
+    "end_user_data_statement": "This cog temporarily stores Discord user IDs to keep track of game submissions during an active game."
+}
