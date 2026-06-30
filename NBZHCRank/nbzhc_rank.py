@@ -46,12 +46,6 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
             await interaction.followup.send("Port must be a valid number.", ephemeral=True)
             return
 
-        # Print debug to terminal
-        print(f"[NBZHCRank Debug] Modal Submit:")
-        print(f"Host: '{self.host.value}'")
-        print(f"User: '{self.user.value}'")
-        print(f"DB: '{self.database.value}'")
-
         # Use set() directly on the variables to store them in the root of the cog's global config
         # We use db_ prefix to avoid collisions with Redbot's built-in config groups like config.user()
         await self.config.db_host.set(str(self.host.value))
@@ -60,13 +54,6 @@ class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
         await self.config.db_password.set(str(self.password.value))
         await self.config.db_name.set(str(self.database.value))
         
-        # Verify it saved
-        saved_d = await self.config.all()
-        safe_saved_d = saved_d.copy()
-        if "db_password" in safe_saved_d:
-            safe_saved_d["db_password"] = "***REDACTED***"
-        print(f"[NBZHCRank Debug] Saved Config State: {safe_saved_d}")
-
         # Delete the original prompt message
         try:
             if self.msg:
@@ -124,10 +111,6 @@ class NBZHCRank(commands.Cog):
     async def get_db_connection(self):
         """Helper to get a database connection using Config credentials."""
         config_data = await self.config.all()
-        safe_config = config_data.copy()
-        if "db_password" in safe_config:
-            safe_config["db_password"] = "***REDACTED***"
-        print(f"[NBZHCRank Debug] get_db_connection read: {safe_config}")
         # Ensure all required fields are set
         if not all([config_data.get("db_host"), config_data.get("db_user"), config_data.get("db_name")]):
             raise ValueError("Database credentials are not fully configured.")
