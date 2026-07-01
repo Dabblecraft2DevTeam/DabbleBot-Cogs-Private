@@ -225,6 +225,16 @@ class QuoteGame(commands.Cog):
         answers = game_data.get("answers", {})
         real_word = game_data.get("target_word", "")
         
+        if len(answers) == 1 and not game_data.get("extended"):
+            try:
+                await channel.send(f"<@&1008940890678636544>\nOnly one person has submitted an answer so far! Extending the answering phase by another 24 hours.")
+            except discord.Forbidden:
+                pass
+            game_data["extended"] = True
+            game_data["start_time"] = game_data.get("start_time", datetime.utcnow().timestamp()) + 86400
+            await self.config.guild(guild).current_game.set(game_data)
+            return
+            
         min_subs = await self.config.guild(guild).min_submissions()
         if len(answers) < min_subs:
             try:
