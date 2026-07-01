@@ -102,7 +102,7 @@ class QuoteGame(commands.Cog):
                                           "In 24 hours, everyone will get to vote on the best or funniest answer!",
                               color=discord.Color.blue())
         try:
-            msg = await channel.send(embed=embed)
+            msg = await channel.send(content="<@&1008940890678636544>", embed=embed)
         except discord.Forbidden:
             return # Bot cannot send messages in this channel
             
@@ -205,7 +205,7 @@ class QuoteGame(commands.Cog):
         
         if not answers:
             try:
-                await channel.send(f"The quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
+                await channel.send(f"<@&1008940890678636544>\nThe quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
             except discord.Forbidden:
                 pass
             await self.config.guild(guild).current_game.set({})
@@ -237,7 +237,7 @@ class QuoteGame(commands.Cog):
                               description=desc,
                               color=discord.Color.green())
         try:
-            msg = await channel.send(embed=embed)
+            msg = await channel.send(content="<@&1008940890678636544>", embed=embed)
             for i in range(len(unique_answers)):
                 await msg.add_reaction(emojis[i])
         except discord.Forbidden:
@@ -327,13 +327,13 @@ class QuoteGame(commands.Cog):
                 embed = discord.Embed(title="Quote Game: Results!",
                                       description=f"{winner_text}\n\n**Original Quote:**\n\"{full_quote}\"\n- {author}",
                                       color=discord.Color.gold())
-                await channel.send(embed=embed)
+                await channel.send(content="<@&1008940890678636544>", embed=embed)
             else:
-                await channel.send(f"Couldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                await channel.send(f"<@&1008940890678636544>\nCouldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
                 
         except discord.NotFound:
             try:
-                await channel.send(f"The voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                await channel.send(f"<@&1008940890678636544>\nThe voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
             except discord.Forbidden:
                 pass
         except discord.Forbidden:
