@@ -18,7 +18,8 @@ class QuoteGame(commands.Cog):
             "is_active": False,
             "current_game": {},
             "last_game_time": 0,
-            "current_winners": []
+            "current_winners": [],
+            "min_submissions": 1
         }
         self.config.register_guild(**default_guild)
         self.loop_task = bot.loop.create_task(self.game_loop())
@@ -57,6 +58,14 @@ class QuoteGame(commands.Cog):
         
         await self.start_game(ctx.guild, channel)
         await ctx.send("Forced a new game to start.")
+
+    @quotegame.command()
+    async def setmin(self, ctx, amount: int):
+        """Set the minimum number of submissions required to proceed to voting."""
+        if amount < 1:
+            return await ctx.send("Minimum submissions must be at least 1.")
+        await self.config.guild(ctx.guild).min_submissions.set(amount)
+        await ctx.send(f"Minimum submissions set to {amount}.")
 
     async def fetch_quote(self):
         # Always pick from our historical quotes list
@@ -101,6 +110,7 @@ class QuoteGame(commands.Cog):
                                           "I will instantly delete your message to keep your answer a secret. "
                                           "In 24 hours, everyone will get to vote on the best or funniest answer!",
                               color=discord.Color.blue())
+        embed.set_footer(text="Submissions: 0")
         try:
             msg = await channel.send(content="<@&1008940890678636544>", embed=embed)
         except discord.Forbidden:
@@ -144,6 +154,18 @@ class QuoteGame(commands.Cog):
                 
             game_data["answers"][user_id] = word
             await self.config.guild(message.guild).current_game.set(game_data)
+            
+            # Update the embed footer with live submissions count
+            message_id = game_data.get("message_id")
+            if message_id:
+                try:
+                    game_msg = await message.channel.fetch_message(message_id)
+                    if game_msg.embeds:
+                        embed = game_msg.embeds[0]
+                        embed.set_footer(text=f"Submissions: {len(game_data['answers'])}")
+                        await game_msg.edit(embed=embed)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
             
             # Try to delete the user's message to keep it a secret
             try:
@@ -203,9 +225,13 @@ class QuoteGame(commands.Cog):
         answers = game_data.get("answers", {})
         real_word = game_data.get("target_word", "")
         
-        if not answers:
+        min_subs = await self.config.guild(guild).min_submissions()
+        if len(answers) < min_subs:
             try:
-                await channel.send(f"<@&1008940890678636544>\nThe quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
+                if min_subs == 1:
+                    await channel.send(f"<@&1008940890678636544>\nThe quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
+                else:
+                    await channel.send(f"<@&1008940890678636544>\nThe quote game ended, but not enough people submitted answers (Minimum: {min_subs})! 😢\n\nFor the record, the missing word was **{real_word}**.")
             except discord.Forbidden:
                 pass
             await self.config.guild(guild).current_game.set({})
