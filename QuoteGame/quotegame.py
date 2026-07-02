@@ -239,6 +239,25 @@ class QuoteGame(commands.Cog):
 
     async def game_loop(self):
         await self.bot.wait_until_ready()
+        
+        # Re-register views for any ongoing votes
+        try:
+            all_data = await self.config.all_guilds()
+            for guild_id, data in all_data.items():
+                guild = self.bot.get_guild(guild_id)
+                if not guild:
+                    continue
+                current_game = data.get("current_game")
+                if current_game and current_game.get("phase") == "voting":
+                    options = current_game.get("options", [])
+                    poll_msg_id = current_game.get("poll_message_id")
+                    if options and poll_msg_id:
+                        view = VotingView(self, guild, options)
+                        self.bot.add_view(view, message_id=poll_msg_id)
+        except Exception as e:
+            import logging
+            logging.getLogger("red.quotegame").error("Error restoring QuoteGame views", exc_info=e)
+
         while not self.bot.is_closed():
             try:
                 all_data = await self.config.all_guilds()
