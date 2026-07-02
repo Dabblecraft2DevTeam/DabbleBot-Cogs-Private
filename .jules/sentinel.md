@@ -18,8 +18,3 @@
 **Vulnerability:** Updating Red-DiscordBot's `Config` directly inside a high-frequency event like `on_member_join` (`CaptchaGate/captchagate.py`) created a severe I/O bottleneck, leading to potential bot unresponsiveness and Self-DoS when multiple users join simultaneously.
 **Learning:** `Config` operations are disk/database I/O-bound. Performing non-critical state updates (like LRU challenge timestamps) inside concurrent event handlers blocks the event loop and delays critical processing.
 **Prevention:** Track high-frequency, non-critical state changes using an in-memory dictionary cache initialized in `__init__` rather than writing directly to `Config` in real-time.
-
-## 2026-07-02 - Missing Embed Validation / SSRF via Unvalidated Image URL
-**Vulnerability:** The `challenge_add` command in `CaptchaGate/captchagate.py` accepted user-provided `image_url`s without validation. This allowed users to supply non-HTTP(S) URLs (SSRF risk via Discord's proxy) or excessively long strings.
-**Learning:** Discord enforces strict character limits on embed properties, including `image_url` (max 2048 characters). If a bot attempts to send an embed with properties exceeding these limits, the Discord API returns a 400 Bad Request error, leading to a Self-Denial of Service (Self-DoS). Furthermore, failing to enforce an `http(s)://` scheme opens up the bot's media proxy to Server-Side Request Forgery.
-**Prevention:** When accepting user-provided URLs for Discord bot features (e.g., embed `image_url`), enforce strict scheme validation (allowing only `http://` and `https://`) alongside length validation (e.g., max 2048 chars) to prevent SSRF vulnerabilities and Missing Embed Validation (Self-DoS) crashes.

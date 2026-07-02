@@ -692,11 +692,8 @@ class CaptchaGate(commands.Cog):
         <correct_option>: The text of the correct option (must be one of the options).
         <options>: A comma-separated list of all possible option texts (e.g., "Cat, Dog, Bird").
         """
-        if not image_url.startswith(("http://", "https://")):
-            return await ctx.send("❌ The `image_url` must start with `http://` or `https://`.")
-
-        if len(image_url) > 2048:
-            return await ctx.send("❌ The `image_url` must be 2048 characters or fewer.")
+        if not image_url.startswith(("http://", "https://")) or len(image_url) > 2048:
+            return await ctx.send("❌ The `image_url` must start with http:// or https:// and be less than 2048 characters.")
 
         options_list = [o.strip() for o in options.split(',')]
         
