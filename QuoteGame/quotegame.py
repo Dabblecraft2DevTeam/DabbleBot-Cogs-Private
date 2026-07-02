@@ -176,7 +176,7 @@ class QuoteGame(commands.Cog):
         ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
         
         try:
-            msg = await channel.send(content=ping_content, embed=embed)
+            msg = await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=ping_content, embed=embed)
         except discord.Forbidden:
             return # Bot cannot send messages in this channel
             
@@ -313,7 +313,7 @@ class QuoteGame(commands.Cog):
 
         if len(answers) == 1 and not game_data.get("extended"):
             try:
-                await channel.send(content=f"{ping_content}\nOnly one person has submitted an answer so far! Extending the answering phase by another 24 hours.")
+                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nOnly one person has submitted an answer so far! Extending the answering phase by another 24 hours.")
             except discord.Forbidden:
                 pass
             game_data["extended"] = True
@@ -325,9 +325,9 @@ class QuoteGame(commands.Cog):
         if len(answers) < min_subs:
             try:
                 if min_subs == 1:
-                    await channel.send(content=f"{ping_content}\nThe quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
+                    await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nThe quote game ended, but nobody submitted any answers! 😢\n\nFor the record, the missing word was **{real_word}**.")
                 else:
-                    await channel.send(content=f"{ping_content}\nThe quote game ended, but not enough people submitted answers (Minimum: {min_subs})! 😢\n\nFor the record, the missing word was **{real_word}**.")
+                    await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nThe quote game ended, but not enough people submitted answers (Minimum: {min_subs})! 😢\n\nFor the record, the missing word was **{real_word}**.")
             except discord.Forbidden:
                 pass
             await self.config.guild(guild).current_game.set({})
@@ -358,7 +358,7 @@ class QuoteGame(commands.Cog):
         view = VotingView(self, guild, unique_answers)
         
         try:
-            msg = await channel.send(content=ping_content, embed=embed, view=view)
+            msg = await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=ping_content, embed=embed, view=view)
         except discord.Forbidden:
             await self.config.guild(guild).current_game.set({})
             return
@@ -453,17 +453,17 @@ class QuoteGame(commands.Cog):
                 
                 ping_role_id = await self.config.guild(guild).ping_role_id()
                 ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
-                await channel.send(content=ping_content, embed=embed)
+                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=ping_content, embed=embed)
             else:
                 ping_role_id = await self.config.guild(guild).ping_role_id()
                 ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
-                await channel.send(content=f"{ping_content}\nCouldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nCouldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
                 
         except discord.NotFound:
             ping_role_id = await self.config.guild(guild).ping_role_id()
             ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
             try:
-                await channel.send(content=f"{ping_content}\nThe voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nThe voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
             except discord.Forbidden:
                 pass
         except discord.Forbidden:
