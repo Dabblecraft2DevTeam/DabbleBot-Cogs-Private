@@ -104,7 +104,43 @@ class QuoteGame(commands.Cog):
     async def toggle(self, ctx, state: bool):
         """Enable or disable the weekly game in this server."""
         await self.config.guild(ctx.guild).is_active.set(state)
-        await ctx.send(f"Quote game is now {'enabled' if state else 'disabled'}.")
+        
+        if not state:
+            current_game = await self.config.guild(ctx.guild).current_game()
+            if current_game:
+                channel_id = await self.config.guild(ctx.guild).channel_id()
+                if channel_id:
+                    channel = ctx.guild.get_channel(channel_id)
+                    if channel:
+                        msg_id = current_game.get("message_id")
+                        if msg_id:
+                            try:
+                                msg = await channel.fetch_message(msg_id)
+                                await msg.delete()
+                            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                                pass
+                        poll_msg_id = current_game.get("poll_message_id")
+                        if poll_msg_id:
+                            try:
+                                poll_msg = await channel.fetch_message(poll_msg_id)
+                                await poll_msg.delete()
+                            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                                pass
+                await self.config.guild(ctx.guild).current_game.set({})
+                await ctx.send("Quote game is now disabled. Any active games and their messages have been deleted.")
+            else:
+                await ctx.send("Quote game is now disabled.")
+        else:
+            channel_id = await self.config.guild(ctx.guild).channel_id()
+            if not channel_id:
+                await ctx.send("Quote game is now enabled, but no channel is set. Please set a channel to start a game.")
+            else:
+                channel = ctx.guild.get_channel(channel_id)
+                if not channel:
+                    await ctx.send("Quote game is now enabled, but the configured channel was not found.")
+                else:
+                    await self.start_game(ctx.guild, channel)
+                    await ctx.send("Quote game is now enabled and a new game has been started!")
         
     @quotegame.command()
     async def force(self, ctx):
