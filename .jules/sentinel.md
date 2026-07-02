@@ -10,8 +10,16 @@
 **Vulnerability:** The `rank` command in `NBZHCRank/nbzhc_rank.py` interpolated unvalidated user input (`playername`) directly into a Mojang API URL (`https://api.mojang.com/users/profiles/minecraft/{playername}`). This could allow an attacker to use Path Traversal characters (e.g., `../`, `%2e%2e%2f`) or unexpected URL components to manipulate the API request, leading to Server-Side Request Forgery (SSRF) or unexpected application behavior.
 **Learning:** Even when interpolating user input into seemingly "safe" external API URLs, unvalidated input can alter the intended path or query parameters, creating SSRF or Path Traversal risks.
 **Prevention:** Always strictly validate and sanitize user input against an allowlist pattern (e.g., regex `^[a-zA-Z0-9_]{1,16}$` for Minecraft usernames) *before* interpolating it into any URLs or external system requests.
+## 2026-05-02 - Missing Embed Validation and SSRF Risk
+**Vulnerability:** `CaptchaGate/captchagate.py` lacked validation for external image URLs (`image_url`) and text limits (`options_list`, `captchaset_welcometitle`, `captchaset_welcomedesc`) provided by admins. This missing embed validation can lead to Discord API 400 errors (Self-DoS) and unvalidated URLs pose an SSRF risk via Discord's media proxy.
+**Learning:** Always validate external resources strictly (e.g., scheme `http://` or `https://` for image URLs) and enforce character limits before they are sent to Discord to prevent bot failures and proxy exploits.
+**Prevention:** Implement strict length checking based on Discord API limits (e.g., embed titles <= 256, descriptions <= 4096, URLs <= 2048, and button labels <= 80 chars). Ensure URL inputs enforce a strict scheme allowlist.
+## 2026-05-02 - Config I/O-Bound Self-DoS
+**Vulnerability:** Updating Red-DiscordBot's `Config` directly inside a high-frequency event like `on_member_join` (`CaptchaGate/captchagate.py`) created a severe I/O bottleneck, leading to potential bot unresponsiveness and Self-DoS when multiple users join simultaneously.
+**Learning:** `Config` operations are disk/database I/O-bound. Performing non-critical state updates (like LRU challenge timestamps) inside concurrent event handlers blocks the event loop and delays critical processing.
+**Prevention:** Track high-frequency, non-critical state changes using an in-memory dictionary cache initialized in `__init__` rather than writing directly to `Config` in real-time.
 
-## 2026-06-05 - Missing Embed Validation / SSRF via Unvalidated Image URL
+## 2026-07-02 - Missing Embed Validation / SSRF via Unvalidated Image URL
 **Vulnerability:** The `challenge_add` command in `CaptchaGate/captchagate.py` accepted user-provided `image_url`s without validation. This allowed users to supply non-HTTP(S) URLs (SSRF risk via Discord's proxy) or excessively long strings.
 **Learning:** Discord enforces strict character limits on embed properties, including `image_url` (max 2048 characters). If a bot attempts to send an embed with properties exceeding these limits, the Discord API returns a 400 Bad Request error, leading to a Self-Denial of Service (Self-DoS). Furthermore, failing to enforce an `http(s)://` scheme opens up the bot's media proxy to Server-Side Request Forgery.
 **Prevention:** When accepting user-provided URLs for Discord bot features (e.g., embed `image_url`), enforce strict scheme validation (allowing only `http://` and `https://`) alongside length validation (e.g., max 2048 chars) to prevent SSRF vulnerabilities and Missing Embed Validation (Self-DoS) crashes.
