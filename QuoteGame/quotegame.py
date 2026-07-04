@@ -20,7 +20,7 @@ class VotingView(discord.ui.View):
             label = (option[:97] + "...") if len(option) > 100 else option
             button = discord.ui.Button(label=label, custom_id=f"qg_vote_{guild.id}_{i}")
             button.callback = self.button_callback
-            self.add_component(button)
+            self.add_item(button)
 
     async def button_callback(self, interaction: discord.Interaction):
         # Prevent non-guild members or bots from voting
