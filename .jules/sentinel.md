@@ -18,3 +18,7 @@
 **Vulnerability:** Updating Red-DiscordBot's `Config` directly inside a high-frequency event like `on_member_join` (`CaptchaGate/captchagate.py`) created a severe I/O bottleneck, leading to potential bot unresponsiveness and Self-DoS when multiple users join simultaneously.
 **Learning:** `Config` operations are disk/database I/O-bound. Performing non-critical state updates (like LRU challenge timestamps) inside concurrent event handlers blocks the event loop and delays critical processing.
 **Prevention:** Track high-frequency, non-critical state changes using an in-memory dictionary cache initialized in `__init__` rather than writing directly to `Config` in real-time.
+## 2024-07-04 - ThreadPoolExecutor Resource Leak
+**Vulnerability:** The `customping` cog instantiated a local `concurrent.futures.ThreadPoolExecutor(max_workers=1)` for running synchronous speedtest blocking calls without shutting it down. This can cause severe resource leaks (unreclaimed threads) if the command is spammed, leading to a potential Denial of Service (DoS) of the bot.
+**Learning:** Instantiating unmanaged ThreadPoolExecutors locally without explicit `.shutdown()` leaks threads and memory.
+**Prevention:** Instead of creating ad-hoc local ThreadPoolExecutors, pass `None` to `loop.run_in_executor(None, func)` to reuse the default async event loop executor, which is properly managed globally.
