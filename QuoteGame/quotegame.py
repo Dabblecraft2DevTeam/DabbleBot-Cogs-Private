@@ -44,7 +44,8 @@ class VotingView(discord.ui.View):
             return await interaction.response.send_message("You have already voted in this game!", ephemeral=True)
             
         # Record the vote
-        votes[option_index] = votes.get(option_index, 0) + 1
+        opt_key = str(option_index)
+        votes[opt_key] = votes.get(opt_key, 0) + 1
         if "voted_users" not in game_data:
             game_data["voted_users"] = []
         game_data["voted_users"].append(user_id)
@@ -403,7 +404,7 @@ class QuoteGame(commands.Cog):
         game_data["vote_start_time"] = datetime.now(timezone.utc).timestamp()
         game_data["poll_message_id"] = msg.id
         game_data["options"] = unique_answers
-        game_data["votes"] = {i: 0 for i in range(len(unique_answers))}
+        game_data["votes"] = {str(i): 0 for i in range(len(unique_answers))}
         game_data["voted_users"] = []
         
         await self.config.guild(guild).current_game.set(game_data)
@@ -423,8 +424,12 @@ class QuoteGame(commands.Cog):
             
             results = []
             for index, count in votes.items():
-                if index < len(options):
-                    results.append((options[index], count))
+                try:
+                    index_int = int(index)
+                    if index_int < len(options):
+                        results.append((options[index_int], count))
+                except ValueError:
+                    pass
                         
             if results:
                 results.sort(key=lambda x: x[1], reverse=True)
