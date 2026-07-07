@@ -31,3 +31,7 @@
 **Learning:** Checking only `role >= ctx.guild.me.top_role` ensures the bot can assign the role, but failing to check the invoker's role hierarchy creates a Privilege Escalation vulnerability. A server administrator with a low-ranking admin role could configure the bot to assign a much higher-ranking role (e.g., full Administrator) to users (or themselves), bypassing Discord's built-in hierarchy restrictions.
 **Prevention:** Always implement hierarchy checks against both the invoker (allowing server owners to bypass: `ctx.author != ctx.guild.owner and role >= ctx.author.top_role`) and the bot (`role >= ctx.guild.me.top_role`) when allowing users to configure roles for the bot to assign.
 
+## 2026-07-07 - [IDOR in Redbot Cog]
+**Vulnerability:** The NameUpdate cog used instance variables to store guild-specific state, leading to cross-guild state contamination (IDOR).
+**Learning:** Instance variables in a Cog are shared across all guilds the bot is in.
+**Prevention:** Always use `Config.guild(guild)` to store state that is specific to a guild.
