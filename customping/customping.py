@@ -2,7 +2,6 @@
 # Speed test logic from https://github.com/PhasecoreX/PCXCogs/tree/master/netspeed
 
 import asyncio
-import concurrent
 import datetime
 import time
 
@@ -62,12 +61,11 @@ class CustomPing(commands.Cog):
         except discord.NotFound:
             return
 
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         loop = asyncio.get_event_loop()
         try:
             s = speedtest.Speedtest(secure=True)
-            await loop.run_in_executor(executor, s.get_servers)
-            await loop.run_in_executor(executor, s.get_best_server)
+            await loop.run_in_executor(None, s.get_servers)
+            await loop.run_in_executor(None, s.get_best_server)
         except speedtest.ConfigRetrievalError:
             return
         else:
