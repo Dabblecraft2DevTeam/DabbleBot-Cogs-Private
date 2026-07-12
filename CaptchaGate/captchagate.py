@@ -627,6 +627,8 @@ class CaptchaGate(commands.Cog):
     @captchaset.command(name="role")
     async def captchaset_role(self, ctx: commands.Context, role: discord.Role):
         """Sets the role to be granted upon passing the CAPTCHA."""
+        if ctx.author != ctx.guild.owner and role >= ctx.author.top_role:
+            return await ctx.send("❌ You cannot set a role higher than or equal to your own top role.")
         if role >= ctx.guild.me.top_role:
             return await ctx.send("❌ My highest role is below or equal to the role you are trying to set. I cannot assign it.")
             

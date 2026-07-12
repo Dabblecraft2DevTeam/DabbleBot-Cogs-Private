@@ -78,6 +78,7 @@ class QuoteGame(commands.Cog):
             self.loop_task.cancel()
 
     @commands.group(aliases=["qg"])
+    @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def quotegame(self, ctx):
         """Settings for QuoteGame"""
@@ -98,6 +99,11 @@ class QuoteGame(commands.Cog):
     @quotegame.command()
     async def setwinnerrole(self, ctx, role: discord.Role):
         """Set the role given to winners."""
+        if ctx.author != ctx.guild.owner and role >= ctx.author.top_role:
+            return await ctx.send("❌ You cannot set a role higher than or equal to your own top role.")
+        if role >= ctx.guild.me.top_role:
+            return await ctx.send("❌ My highest role is below or equal to the role you are trying to set. I cannot assign it.")
+
         await self.config.guild(ctx.guild).winner_role_id.set(role.id)
         await ctx.send(f"Winner role set to {role.mention}.")
 

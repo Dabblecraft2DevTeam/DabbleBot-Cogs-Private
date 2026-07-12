@@ -18,3 +18,7 @@
 **Vulnerability:** Updating Red-DiscordBot's `Config` directly inside a high-frequency event like `on_member_join` (`CaptchaGate/captchagate.py`) created a severe I/O bottleneck, leading to potential bot unresponsiveness and Self-DoS when multiple users join simultaneously.
 **Learning:** `Config` operations are disk/database I/O-bound. Performing non-critical state updates (like LRU challenge timestamps) inside concurrent event handlers blocks the event loop and delays critical processing.
 **Prevention:** Track high-frequency, non-critical state changes using an in-memory dictionary cache initialized in `__init__` rather than writing directly to `Config` in real-time.
+## 2026-05-02 - Privilege Escalation via Role Configuration
+**Vulnerability:** Role configuration commands in `QuoteGame` and `CaptchaGate` failed to verify if the configured role was lower than the invoking user's top role, allowing partial admins to set administrative reward roles for themselves.
+**Learning:** Users with limited admin permissions (e.g., `manage_guild`) can exploit misconfigured bot role assignments to escalate privileges to full Administrator.
+**Prevention:** Always implement role hierarchy checks (`if role >= ctx.author.top_role:`) and bot hierarchy checks (`if role >= ctx.guild.me.top_role:`) before saving role configurations that the bot will later assign.
