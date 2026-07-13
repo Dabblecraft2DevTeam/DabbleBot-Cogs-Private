@@ -184,6 +184,18 @@ class QuoteGame(commands.Cog):
         return blanked, target
 
     async def start_game(self, guild, channel):
+        # Delete previous game messages if they exist
+        current_game = await self.config.guild(guild).current_game()
+        if current_game:
+            for msg_key in ["message_id", "poll_message_id", "result_message_id"]:
+                msg_id = current_game.get(msg_key)
+                if msg_id:
+                    try:
+                        msg = await channel.fetch_message(msg_id)
+                        await msg.delete()
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        pass
+
         # Remove role from previous winners
         winner_role_id = await self.config.guild(guild).winner_role_id()
         role = guild.get_role(winner_role_id)
@@ -318,7 +330,7 @@ class QuoteGame(commands.Cog):
                     last_game_time = data.get("last_game_time", 0)
                     now = datetime.now(timezone.utc).timestamp()
                     
-                    if not current_game:
+                    if not current_game or current_game.get("phase") == "finished":
                         # Check if a week has passed (7 days = 604800 seconds)
                         if now - last_game_time >= 604800:
                             await self.start_game(guild, channel)
@@ -454,22 +466,27 @@ class QuoteGame(commands.Cog):
                                 
                         if not winners:
                             if ans.lower() == real_word.lower():
-                                winners_mentions = "The Original Quote"
+                                winners_mentions = "nobody (the original quote)"
                             else:
-                                winners_mentions = "Nobody (Option was present but not found in submissions)"
+                                winners_mentions = "nobody"
                         else:
-                            winners_mentions = ", ".join(winners)
+                            winners_mentions = " and ".join(winners)
                             
-                        winner_text_parts.append(f"**{ans}** (by {winners_mentions})")
+                        winner_text_parts.append(f"{winners_mentions} (**{ans}**)")
                         
                     if len(tied_answers) == 1:
-                        if winner_ans.lower() == real_word.lower():
-                            winner_text = f"The winning answer was **{winner_ans}** with {top_vote} votes!\nThis was actually the real word!"
+                        if new_winners:
+                            winner_text = f"🏆 The winner is {winner_text_parts[0]} with {top_vote} votes! 🏆"
                         else:
-                            winner_text = f"The winning answer was {winner_text_parts[0]} with {top_vote} votes!\n\nThe real word was **{real_word}**."
+                            winner_text = f"The winning answer was **{winner_ans}** with {top_vote} votes (submitted by {winner_text_parts[0]})."
+                            
+                        if winner_ans.lower() == real_word.lower():
+                            winner_text += "\n*(This was actually the real word!)*"
+                        else:
+                            winner_text += f"\n\nThe real word was **{real_word}**."
                     else:
                         tied_str = "\n".join(f"- {p}" for p in winner_text_parts)
-                        winner_text = f"It's a tie with {top_vote} votes each for:\n{tied_str}\n\nThe real word was **{real_word}**."
+                        winner_text = f"🏆 It's a tie with {top_vote} votes each for: 🏆\n{tied_str}\n\nThe real word was **{real_word}**."
                         
                     if new_winners:
                         winner_role_id = await self.config.guild(guild).winner_role_id()
@@ -494,17 +511,20 @@ class QuoteGame(commands.Cog):
                 
                 ping_role_id = await self.config.guild(guild).ping_role_id()
                 ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
-                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=ping_content, embed=embed)
+                res_msg = await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=ping_content, embed=embed)
+                game_data["result_message_id"] = res_msg.id
             else:
                 ping_role_id = await self.config.guild(guild).ping_role_id()
                 ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
-                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nCouldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                res_msg = await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nCouldn't read the poll results!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                game_data["result_message_id"] = res_msg.id
                 
         except discord.NotFound:
             ping_role_id = await self.config.guild(guild).ping_role_id()
             ping_content = f"<@&{ping_role_id}>" if ping_role_id else ""
             try:
-                await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nThe voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                res_msg = await channel.send(allowed_mentions=discord.AllowedMentions(roles=True), content=f"{ping_content}\nThe voting message was deleted, so I couldn't count the votes!\nFor the record, the real word was **{game_data.get('target_word', '')}**.")
+                game_data["result_message_id"] = res_msg.id
             except discord.Forbidden:
                 pass
         except discord.Forbidden:
@@ -513,4 +533,5 @@ class QuoteGame(commands.Cog):
             import logging
             logging.getLogger("red.quotegame").error("Error in end_game", exc_info=e)
             
-        await self.config.guild(guild).current_game.set({})
+        game_data["phase"] = "finished"
+        await self.config.guild(guild).current_game.set(game_data)
