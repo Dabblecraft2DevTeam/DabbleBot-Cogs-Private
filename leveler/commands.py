@@ -6,9 +6,9 @@ from .ui import LeaderboardPaginationView, LevelShopView
 class CommandsMixin:
     """Mixin for Leveler commands."""
 
-    @commands.hybrid_command(name="rank", description="Shows the leveling profile of a user.")
+    @commands.hybrid_command(name="profile", description="Shows the leveling profile of a user.")
     @app_commands.describe(user="The user to view.")
-    async def rank(self, ctx: commands.Context, user: discord.Member = None):
+    async def profile(self, ctx: commands.Context, user: discord.Member = None):
         user = user or ctx.author
         if user.bot:
             return await ctx.send("Bots don't have levels!")
