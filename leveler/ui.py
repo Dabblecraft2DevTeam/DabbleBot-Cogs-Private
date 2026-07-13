@@ -3,32 +3,29 @@ from redbot.core import bank
 
 class LevelShopView(discord.ui.View):
     """A view for purchasing leveler cosmetics using Red's bank."""
-    def __init__(self, cog, user: discord.Member, db, item_type: str):
+    def __init__(self, cog, user: discord.Member, db, item_type: str, config_options: list):
         super().__init__(timeout=120)
         self.cog = cog
         self.user = user
         self.db = db
-        self.item_type = item_type  # 'title_color' or 'bar_color'
+        self.item_type = item_type  # 'title_color', 'bar_color', or 'background_id'
         
-        # Options could be fetched from config, but we hardcode a few for now
-        self.options = [
-            {"label": "Red", "value": "#FF0000", "price": 500},
-            {"label": "Blue", "value": "#0000FF", "price": 500},
-            {"label": "Green", "value": "#00FF00", "price": 500},
-            {"label": "Gold", "value": "#FFD700", "price": 1000},
-            {"label": "Purple", "value": "#800080", "price": 750},
-        ]
+        self.options = config_options
         
+        if not self.options:
+            self.options = [{"label": "Empty Shop", "value": "none", "price": 0}]
+            
+        # Select options can only have max 25 items
         select_options = [
             discord.SelectOption(
-                label=f"{opt['label']} ({opt['price']} credits)",
-                value=opt['value'],
+                label=f"{opt['label'][:25]} ({opt['price']}c)",
+                value=str(opt['value'])[:100],
                 description=f"Change your {item_type.replace('_', ' ')}."
-            ) for opt in self.options
+            ) for opt in self.options[:25]
         ]
         
         self.select = discord.ui.Select(
-            placeholder="Choose a color to purchase...",
+            placeholder="Choose an item to purchase...",
             min_values=1,
             max_values=1,
             options=select_options

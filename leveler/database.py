@@ -18,7 +18,7 @@ class BaseDB(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def add_user_xp(self, guild_id: int, user_id: int, amount: int) -> tuple[int, int]:
+    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6") -> tuple[int, int]:
         """Returns new (xp, level)."""
         pass
 
@@ -51,10 +51,21 @@ class SQLiteDB(BaseDB):
                 background_id TEXT DEFAULT 'default',
                 title_color TEXT DEFAULT '#FFFFFF',
                 bar_color TEXT DEFAULT '#00FF00',
+                bio TEXT DEFAULT '',
+                prestige INTEGER DEFAULT 0,
                 PRIMARY KEY (guild_id, user_id)
             )
             """
         )
+        try:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN prestige INTEGER DEFAULT 0")
+        except Exception:
+            pass
+            
         await self.conn.commit()
         log.info("SQLite database connected and tables initialized.")
 
@@ -64,7 +75,7 @@ class SQLiteDB(BaseDB):
 
     async def get_user(self, guild_id: int, user_id: int) -> dict:
         async with self.conn.execute(
-            "SELECT xp, level, background_id, title_color, bar_color FROM users WHERE guild_id = ? AND user_id = ?",
+            "SELECT xp, level, background_id, title_color, bar_color, bio, prestige FROM users WHERE guild_id = ? AND user_id = ?",
             (guild_id, user_id)
         ) as cursor:
             row = await cursor.fetchone()
@@ -74,32 +85,40 @@ class SQLiteDB(BaseDB):
                     "level": row[1],
                     "background_id": row[2],
                     "title_color": row[3],
-                    "bar_color": row[4]
+                    "bar_color": row[4],
+                    "bio": row[5],
+                    "prestige": row[6]
                 }
             return {
                 "xp": 0,
                 "level": 0,
                 "background_id": "default",
                 "title_color": "#FFFFFF",
-                "bar_color": "#00FF00"
+                "bar_color": "#00FF00",
+                "bio": "",
+                "prestige": 0
             }
 
-    async def _calculate_level(self, xp: int) -> int:
-        # Mee6 XP formula approximation: XP = 5/6 * lvl * (2 * lvl * lvl + 27 * lvl + 91)
-        # Using a simpler iteration to find current level since solving cubic is complex
+    async def _calculate_level(self, xp: int, algorithm: str = "mee6") -> int:
         level = 0
         while True:
-            required_xp = (5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91)
+            if algorithm == "linear":
+                required_xp = 100 * (level + 1)
+            elif algorithm == "stevy":
+                required_xp = int(100 * (1.5 ** level))
+            else: # mee6 default
+                required_xp = (5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91)
+                
             if xp >= required_xp:
                 level += 1
             else:
                 break
         return level
 
-    async def add_user_xp(self, guild_id: int, user_id: int, amount: int) -> tuple[int, int]:
+    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6") -> tuple[int, int]:
         current = await self.get_user(guild_id, user_id)
         new_xp = current["xp"] + amount
-        new_level = await self._calculate_level(new_xp)
+        new_level = await self._calculate_level(new_xp, algorithm)
         
         await self.conn.execute(
             """
@@ -114,7 +133,7 @@ class SQLiteDB(BaseDB):
 
     async def get_leaderboard(self, guild_id: int, limit: int = 10, offset: int = 0):
         async with self.conn.execute(
-            "SELECT user_id, xp, level FROM users WHERE guild_id = ? ORDER BY xp DESC LIMIT ? OFFSET ?",
+            "SELECT user_id, xp, level, prestige FROM users WHERE guild_id = ? ORDER BY prestige DESC, xp DESC LIMIT ? OFFSET ?",
             (guild_id, limit, offset)
         ) as cursor:
             return await cursor.fetchall()
@@ -170,10 +189,20 @@ class MySQLDB(BaseDB):
                         background_id VARCHAR(255) DEFAULT 'default',
                         title_color VARCHAR(20) DEFAULT '#FFFFFF',
                         bar_color VARCHAR(20) DEFAULT '#00FF00',
+                        bio VARCHAR(100) DEFAULT '',
+                        prestige INT DEFAULT 0,
                         PRIMARY KEY (guild_id, user_id)
                     )
                     """
                 )
+                try:
+                    await cur.execute("ALTER TABLE users ADD COLUMN bio VARCHAR(100) DEFAULT ''")
+                except Exception:
+                    pass
+                try:
+                    await cur.execute("ALTER TABLE users ADD COLUMN prestige INT DEFAULT 0")
+                except Exception:
+                    pass
         log.info("MySQL database connected and tables initialized.")
 
     async def close(self):
@@ -185,7 +214,7 @@ class MySQLDB(BaseDB):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "SELECT xp, level, background_id, title_color, bar_color FROM users WHERE guild_id = %s AND user_id = %s",
+                    "SELECT xp, level, background_id, title_color, bar_color, bio, prestige FROM users WHERE guild_id = %s AND user_id = %s",
                     (guild_id, user_id)
                 )
                 row = await cur.fetchone()
@@ -195,30 +224,40 @@ class MySQLDB(BaseDB):
                         "level": row[1],
                         "background_id": row[2],
                         "title_color": row[3],
-                        "bar_color": row[4]
+                        "bar_color": row[4],
+                        "bio": row[5],
+                        "prestige": row[6]
                     }
                 return {
                     "xp": 0,
                     "level": 0,
                     "background_id": "default",
                     "title_color": "#FFFFFF",
-                    "bar_color": "#00FF00"
+                    "bar_color": "#00FF00",
+                    "bio": "",
+                    "prestige": 0
                 }
 
-    async def _calculate_level(self, xp: int) -> int:
+    async def _calculate_level(self, xp: int, algorithm: str = "mee6") -> int:
         level = 0
         while True:
-            required_xp = (5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91)
+            if algorithm == "linear":
+                required_xp = 100 * (level + 1)
+            elif algorithm == "stevy":
+                required_xp = int(100 * (1.5 ** level))
+            else: # mee6 default
+                required_xp = (5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91)
+                
             if xp >= required_xp:
                 level += 1
             else:
                 break
         return level
 
-    async def add_user_xp(self, guild_id: int, user_id: int, amount: int) -> tuple[int, int]:
+    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6") -> tuple[int, int]:
         current = await self.get_user(guild_id, user_id)
         new_xp = current["xp"] + amount
-        new_level = await self._calculate_level(new_xp)
+        new_level = await self._calculate_level(new_xp, algorithm)
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -236,7 +275,7 @@ class MySQLDB(BaseDB):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "SELECT user_id, xp, level FROM users WHERE guild_id = %s ORDER BY xp DESC LIMIT %s OFFSET %s",
+                    "SELECT user_id, xp, level, prestige FROM users WHERE guild_id = %s ORDER BY prestige DESC, xp DESC LIMIT %s OFFSET %s",
                     (guild_id, limit, offset)
                 )
                 return await cur.fetchall()
@@ -265,7 +304,7 @@ class MySQLDB(BaseDB):
                 set_clauses = []
                 values = []
                 for k, v in kwargs.items():
-                    if k in ("background_id", "title_color", "bar_color"):
+                    if k in ("background_id", "title_color", "bar_color", "bio", "prestige"):
                         set_clauses.append(f"{k} = %s")
                         values.append(v)
                         

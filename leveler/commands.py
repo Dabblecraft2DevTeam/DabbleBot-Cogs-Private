@@ -1,19 +1,23 @@
 import discord
+import re
 from redbot.core import commands, app_commands
 from .image_gen import generate_profile_card
 from .ui import LeaderboardPaginationView, LevelShopView
 
+URL_REGEX = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+
 class CommandsMixin:
     """Mixin for Leveler commands."""
 
-    @commands.hybrid_command(name="profile", description="Shows the leveling profile of a user.")
-    @app_commands.describe(user="The user to view.")
+    @commands.hybrid_command(name="profile", description="Shows your or another user's leveling profile.")
     async def profile(self, ctx: commands.Context, user: discord.Member = None):
+        if not await self.config.guild(ctx.guild).is_enabled():
+            return await ctx.send("The leveling system is currently disabled on this server.")
+            
+        await ctx.defer()
         user = user or ctx.author
         if user.bot:
             return await ctx.send("Bots don't have levels!")
-
-        await ctx.defer()
         
         # Get data
         db = self.db
@@ -31,6 +35,14 @@ class CommandsMixin:
             except:
                 pass
                 
+        # Fetch prestige URL if available
+        prestige_url = ""
+        if user_data.get("prestige", 0) > 0:
+            milestones = await self.config.guild(ctx.guild).prestige_milestones()
+            prestige_str = str(user_data["prestige"])
+            if prestige_str in milestones and isinstance(milestones[prestige_str], dict):
+                prestige_url = milestones[prestige_str].get("image_url", "")
+
         img_bytes = await generate_profile_card(
             user.display_name,
             avatar_bytes,
@@ -38,30 +50,60 @@ class CommandsMixin:
             user_data["level"],
             rank,
             user_data["title_color"],
-            user_data["bar_color"]
+            user_data["bar_color"],
+            user_data.get("bio", ""),
+            user_data.get("background_id", "default"),
+            prestige_url
         )
         
         file = discord.File(img_bytes, filename="profile.png")
         await ctx.send(file=file)
 
+    @commands.hybrid_command(name="bio", description="Set your profile bio.")
+    @app_commands.describe(text="The bio text (max 100 characters).")
+    async def bio(self, ctx: commands.Context, *, text: str):
+        if not await self.config.guild(ctx.guild).is_enabled():
+            return await ctx.send("The leveling system is currently disabled on this server.")
+            
+        # Sanitize URLs
+        clean_text = URL_REGEX.sub("[LINK REMOVED]", text)
+        if len(clean_text) > 100:
+            clean_text = clean_text[:97] + "..."
+            
+        await self.db.update_user_cosmetics(ctx.guild.id, ctx.author.id, bio=clean_text)
+        await ctx.send("Your bio has been updated.")
+
     @commands.hybrid_command(name="top", description="Shows the top users in the server.")
     async def top(self, ctx: commands.Context):
+        if not await self.config.guild(ctx.guild).is_enabled():
+            return await ctx.send("The leveling system is currently disabled on this server.")
+            
         await ctx.defer()
         leaderboard = await self.db.get_leaderboard(ctx.guild.id, limit=100)
         
         if not leaderboard:
             return await ctx.send("No one has any XP yet!")
             
+        milestones = await self.config.guild(ctx.guild).prestige_milestones()
         embeds = []
         for i in range(0, len(leaderboard), 10):
             chunk = leaderboard[i:i+10]
             embed = discord.Embed(title=f"Leaderboard for {ctx.guild.name}", color=await ctx.embed_color())
             description = ""
             for j, row in enumerate(chunk):
-                user_id, xp, level = row
+                user_id, xp, level, prestige_lvl = row
                 member = ctx.guild.get_member(user_id)
                 name = member.display_name if member else f"User {user_id}"
-                description += f"**{i + j + 1}.** {name} - Level {level} ({xp} XP)\n"
+                
+                badge = ""
+                if prestige_lvl > 0 and str(prestige_lvl) in milestones:
+                    badge_data = milestones[str(prestige_lvl)]
+                    if isinstance(badge_data, dict):
+                        badge = f" {badge_data.get('emoji', '')}"
+                    else:
+                        badge = f" {badge_data}"
+                    
+                description += f"**{i + j + 1}.** {name}{badge} - Level {level} ({xp} XP)\n"
             embed.description = description
             embeds.append(embed)
             
@@ -72,21 +114,101 @@ class CommandsMixin:
             await ctx.send(embed=embeds[0], view=view)
 
     @commands.hybrid_command(name="levelshop", description="Buy cosmetics for your profile card.")
-    async def levelshop(self, ctx: commands.Context):
+    async def levelshop(self, ctx: commands.Context, shop_type: str = "colors"):
+        """Buy colors or backgrounds. Usage: [p]levelshop colors OR [p]levelshop backgrounds"""
+        if not await self.config.guild(ctx.guild).is_enabled():
+            return await ctx.send("The leveling system is currently disabled on this server.")
+            
         embed = discord.Embed(
-            title="Leveler Cosmetics Shop",
-            description="Use the dropdown below to purchase custom colors for your profile card using server credits.",
+            title=f"Leveler Cosmetics Shop - {shop_type.capitalize()}",
+            description="Use the dropdown below to purchase custom cosmetics using server credits.",
             color=await ctx.embed_color()
         )
-        view = LevelShopView(self, ctx.author, self.db, item_type="bar_color")
+        
+        item_type = "background_id" if shop_type.lower().startswith("bg") or shop_type.lower() == "backgrounds" else "bar_color"
+        options = await self.config.guild(ctx.guild).shop_backgrounds() if item_type == "background_id" else await self.config.guild(ctx.guild).shop_colors()
+        
+        view = LevelShopView(self, ctx.author, self.db, item_type=item_type, config_options=options)
         await ctx.send(embed=embed, view=view)
 
     @commands.group(name="levelset")
     @commands.admin_or_permissions(manage_guild=True)
     async def levelset(self, ctx: commands.Context):
-        """Configuration for the Leveler cog."""
+        """Configure the leveling system."""
         pass
         
+    @levelset.command(name="toggle")
+    async def levelset_toggle(self, ctx: commands.Context):
+        """Enable or disable the leveling system in this server."""
+        current = await self.config.guild(ctx.guild).is_enabled()
+        await self.config.guild(ctx.guild).is_enabled.set(not current)
+        state = "enabled" if not current else "disabled"
+        await ctx.send(f"The leveling system is now **{state}**.")
+
+    @levelset.command(name="guide")
+    async def levelset_guide(self, ctx: commands.Context):
+        """Displays a comprehensive guide on how to configure and use the Leveler cog."""
+        embed = discord.Embed(
+            title="📚 DabbleLeveler Admin Guide",
+            description="Welcome to the Leveler cog! Here is everything you need to know to configure and manage the leveling system for your server.",
+            color=await ctx.embed_color()
+        )
+        
+        embed.add_field(
+            name="1. Getting Started",
+            value="The cog is **disabled by default**. To start tracking XP, an admin must run `[p]levelset toggle`. Users gain XP by sending messages (subject to a cooldown).",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="2. XP & Algorithms",
+            value=(
+                "• `[p]levelset range <min> <max>`: Set the random XP amount granted per message.\n"
+                "• `[p]levelset cooldown <seconds>`: Set how often users can gain XP from messages.\n"
+                "• `[p]levelset algorithm <mee6|stevy|linear>`: Change how XP scales per level. Mee6 is exponential (harder), Stevy is extremely exponential, and Linear is a flat curve."
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="3. Level Up Rewards",
+            value=(
+                "• `[p]levelset channel <#channel>`: Set where level-up messages are sent.\n"
+                "• `[p]levelset reward <amount>`: Set how many economy credits users earn when they level up."
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="4. The Cosmetics Shop",
+            value=(
+                "Users can spend their credits in `[p]levelshop colors` and `[p]levelshop backgrounds`.\n"
+                "• `[p]levelset shop addcolor <name> <hex> <price>`: Add a color to the shop.\n"
+                "• `[p]levelset shop addbg <name> <image_url> <price>`: Add a background to the shop."
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="5. Prestige Badges",
+            value=(
+                "Reward dedicated users with prestige badges!\n"
+                "• `[p]levelset prestige add <level> <emoji> <image_url>`: Adds a badge for reaching a level. The emoji appears in `[p]top`, and the image appears on their `[p]profile` card."
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="6. Moderation Tools",
+            value=(
+                "• `[p]levelset addxp <user> <amount>`: Manually grant XP to a user.\n"
+                "• `[p]levelset resetbio <user>`: Wipe an inappropriate user bio."
+            ),
+            inline=False
+        )
+
+        await ctx.send(embed=embed)
+
     @levelset.command(name="channel")
     async def levelset_channel(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """Sets the channel for level-up messages. Leave blank to disable."""
@@ -108,3 +230,103 @@ class CommandsMixin:
         """Sets the flat credit reward given on level up."""
         await self.config.guild(ctx.guild).level_up_reward.set(amount)
         await ctx.send(f"Users will now receive {amount} credits when they level up.")
+
+    @levelset.command(name="show")
+    async def levelset_show(self, ctx: commands.Context):
+        """Shows the current leveling configuration for this server."""
+        guild = ctx.guild
+        settings = await self.config.guild(guild).all()
+        
+        embed = discord.Embed(title=f"Leveler Config for {guild.name}", color=await ctx.embed_color())
+        embed.add_field(name="XP Cooldown", value=f"{settings['message_cooldown']}s", inline=True)
+        
+        chan = guild.get_channel(settings['level_up_channel']) if settings['level_up_channel'] else None
+        embed.add_field(name="Level Up Channel", value=chan.mention if chan else "Disabled", inline=True)
+        
+        embed.add_field(name="Level Up Reward", value=f"{settings['level_up_reward']} credits", inline=True)
+        embed.add_field(name="XP Min", value=str(settings['xp_min']))
+        embed.add_field(name="XP Max", value=str(settings['xp_max']))
+        embed.add_field(name="Algorithm", value=str(settings['algorithm']).capitalize())
+        embed.add_field(name="Status", value="Enabled" if settings['is_enabled'] else "Disabled")
+        
+        await ctx.send(embed=embed)
+
+    @levelset.command(name="algorithm")
+    async def levelset_algorithm(self, ctx: commands.Context, algorithm: str):
+        """Sets the algorithm used to calculate levels. 
+        Options: mee6, linear, stevy
+        """
+        algorithm = algorithm.lower()
+        if algorithm not in ["mee6", "linear", "stevy"]:
+            return await ctx.send("Invalid algorithm. Choose from: mee6, linear, stevy")
+            
+        await self.config.guild(ctx.guild).algorithm.set(algorithm)
+        await ctx.send(f"Leveling algorithm set to **{algorithm.capitalize()}**.")
+
+    @levelset.command(name="resetbio")
+    async def levelset_resetbio(self, ctx: commands.Context, user: discord.Member):
+        """Resets a user's bio."""
+        await self.db.update_user_cosmetics(ctx.guild.id, user.id, bio="")
+        await ctx.send(f"{user.display_name}'s bio has been reset.")
+
+    @levelset.command(name="addxp")
+    async def levelset_addxp(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """Add XP to a user manually."""
+        algorithm = await self.config.guild(ctx.guild).algorithm()
+        new_xp, new_level = await self.db.add_user_xp(ctx.guild.id, user.id, amount, algorithm)
+        await ctx.send(f"Added {amount} XP to {user.display_name}. They are now at {new_xp} XP (Level {new_level}).")
+
+    @levelset.group(name="shop")
+    async def levelset_shop(self, ctx: commands.Context):
+        """Configure the leveling shop."""
+        pass
+
+    @levelset_shop.command(name="addcolor")
+    async def shop_addcolor(self, ctx: commands.Context, name: str, hex_code: str, price: int):
+        """Add a color to the shop. Example: [p]levelset shop addcolor Red #FF0000 500"""
+        async with self.config.guild(ctx.guild).shop_colors() as colors:
+            colors.append({"label": name, "value": hex_code, "price": price})
+        await ctx.send(f"Added color '{name}' ({hex_code}) for {price} credits.")
+
+    @levelset_shop.command(name="addbg")
+    async def shop_addbg(self, ctx: commands.Context, name: str, url: str, price: int):
+        """Add a background URL to the shop."""
+        async with self.config.guild(ctx.guild).shop_backgrounds() as bgs:
+            bgs.append({"label": name, "value": url, "price": price})
+        await ctx.send(f"Added background '{name}' for {price} credits.")
+
+    @levelset.group(name="prestige")
+    async def levelset_prestige(self, ctx: commands.Context):
+        """Configure prestige badges."""
+        pass
+
+    @levelset_prestige.command(name="add")
+    async def prestige_add(self, ctx: commands.Context, level: int, emoji: str, image_url: str):
+        """Add a prestige badge. Usage: [p]levelset prestige add <level> <emoji> <image_url>"""
+        async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
+            milestones[str(level)] = {"emoji": emoji, "image_url": image_url}
+        await ctx.send(f"Added prestige badge for reaching level {level}.")
+
+    @commands.group(name="levelerdb")
+    @commands.is_owner()
+    async def levelerdb(self, ctx: commands.Context):
+        """Global configuration for the Leveler database (Bot Owner Only)."""
+        pass
+
+    @levelerdb.command(name="toggle")
+    async def levelerdb_toggle(self, ctx: commands.Context):
+        """Toggles between SQLite and MySQL. Requires a cog reload to take effect."""
+        current = await self.config.use_mysql()
+        await self.config.use_mysql.set(not current)
+        new_state = "MySQL" if not current else "SQLite"
+        await ctx.send(f"Database backend switched to **{new_state}**. Please reload the cog (`[p]reload leveler`) for changes to apply.")
+
+    @levelerdb.command(name="setup")
+    async def levelerdb_setup(self, ctx: commands.Context, host: str, user: str, password: str, db: str, port: int = 3306):
+        """Sets the MySQL database credentials. Requires a cog reload to take effect."""
+        await self.config.mysql_host.set(host)
+        await self.config.mysql_user.set(user)
+        await self.config.mysql_password.set(password)
+        await self.config.mysql_db.set(db)
+        await self.config.mysql_port.set(port)
+        await ctx.send("MySQL configuration saved. Please reload the cog to apply.")

@@ -24,11 +24,26 @@ def ensure_assets():
 # Ensure assets on load
 ensure_assets()
 
-def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str) -> io.BytesIO:
+def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_url: str = "") -> io.BytesIO:
     """Synchronous function to generate a profile card."""
     width, height = 800, 250
     # Background (Dark gray if default)
     img = Image.new("RGBA", (width, height), (35, 39, 42, 255))
+    
+    if background_id and background_id != "default":
+        if background_id.startswith("http"):
+            try:
+                req = urllib.request.Request(background_id, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    bg = Image.open(io.BytesIO(resp.read())).convert("RGBA")
+                bg = bg.resize((width, height))
+                img.paste(bg, (0,0))
+                # Add overlay
+                overlay = Image.new("RGBA", (width, height), (0, 0, 0, 150))
+                img = Image.alpha_composite(img, overlay)
+            except Exception:
+                pass
+                
     draw = ImageDraw.Draw(img)
 
     try:
@@ -58,6 +73,21 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
 
     # Draw Rank and Level
     draw.text((220, 100), f"Rank: #{rank}   Level: {level}", font=font_medium, fill=(255, 255, 255, 255))
+
+    # Draw Bio
+    if bio:
+        draw.text((220, 140), bio, font=font_small, fill=(200, 200, 200, 255))
+        
+    # Draw Prestige Badge if available
+    if prestige_url and prestige_url.startswith("http"):
+        try:
+            req = urllib.request.Request(prestige_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                badge = Image.open(io.BytesIO(resp.read())).convert("RGBA")
+            badge = badge.resize((50, 50))
+            img.paste(badge, (700, 30), badge)
+        except Exception:
+            pass
 
     # Calculate XP progress (Mee6 formula approximate next level)
     required_xp = int((5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91))
@@ -117,10 +147,10 @@ def generate_levelup_card_sync(username: str, avatar_bytes: bytes, new_level: in
     output.seek(0)
     return output
 
-async def generate_profile_card(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str) -> io.BytesIO:
+async def generate_profile_card(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_url: str = "") -> io.BytesIO:
     """Async wrapper for profile card generation."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, generate_profile_card_sync, username, avatar_bytes, xp, level, rank, title_color, bar_color)
+    return await loop.run_in_executor(executor, generate_profile_card_sync, username, avatar_bytes, xp, level, rank, title_color, bar_color, bio, background_id, prestige_url)
 
 async def generate_levelup_card(username: str, avatar_bytes: bytes, new_level: int) -> io.BytesIO:
     """Async wrapper for level-up card generation."""

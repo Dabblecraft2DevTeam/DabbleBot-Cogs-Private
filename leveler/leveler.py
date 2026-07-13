@@ -22,6 +22,19 @@ class Leveler(CommandsMixin, commands.Cog):
             "level_up_reward": 100,
             "xp_min": 15,
             "xp_max": 25,
+            "algorithm": "mee6",
+            "is_enabled": False,
+            "shop_colors": [
+                {"label": "Red", "value": "#FF0000", "price": 500},
+                {"label": "Blue", "value": "#0000FF", "price": 500},
+                {"label": "Green", "value": "#00FF00", "price": 500},
+                {"label": "Gold", "value": "#FFD700", "price": 1000},
+                {"label": "Purple", "value": "#800080", "price": 750}
+            ],
+            "shop_backgrounds": [
+                {"label": "Default", "value": "default", "price": 0}
+            ],
+            "prestige_milestones": {}
         }
         
         # Global settings for database choice
@@ -73,6 +86,10 @@ class Leveler(CommandsMixin, commands.Cog):
         if message.author.bot or not message.guild:
             return
             
+        is_enabled = await self.config.guild(message.guild).is_enabled()
+        if not is_enabled:
+            return
+            
         guild = message.guild
         user = message.author
         
@@ -97,7 +114,8 @@ class Leveler(CommandsMixin, commands.Cog):
         old_data = await self.db.get_user(guild.id, user.id)
         old_level = old_data["level"]
         
-        new_xp, new_level = await self.db.add_user_xp(guild.id, user.id, gained_xp)
+        algorithm = await self.config.guild(guild).algorithm()
+        new_xp, new_level = await self.db.add_user_xp(guild.id, user.id, gained_xp, algorithm)
         
         # Check for level up
         if new_level > old_level:
@@ -131,5 +149,12 @@ class Leveler(CommandsMixin, commands.Cog):
             msg = f"Congratulations {user.mention}!"
             if reward > 0:
                 msg += f" You earned **{reward}** credits!"
+                
+            # Prestige Check
+            milestones = await self.config.guild(guild).prestige_milestones()
+            str_level = str(new_level)
+            if str_level in milestones:
+                await self.db.update_user_cosmetics(guild.id, user.id, prestige=new_level)
+                msg += f" You also earned a prestige badge {milestones[str_level]}!"
                 
             await channel.send(content=msg, file=file)
