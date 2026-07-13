@@ -44,8 +44,8 @@ class CommandsMixin:
         file = discord.File(img_bytes, filename="profile.png")
         await ctx.send(file=file)
 
-    @commands.hybrid_command(name="leaderboard", description="Shows the top users in the server.")
-    async def leaderboard(self, ctx: commands.Context):
+    @commands.hybrid_command(name="top", description="Shows the top users in the server.")
+    async def top(self, ctx: commands.Context):
         await ctx.defer()
         leaderboard = await self.db.get_leaderboard(ctx.guild.id, limit=100)
         
