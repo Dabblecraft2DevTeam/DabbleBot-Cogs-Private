@@ -629,6 +629,8 @@ class CaptchaGate(commands.Cog):
         """Sets the role to be granted upon passing the CAPTCHA."""
         if role >= ctx.guild.me.top_role:
             return await ctx.send("❌ My highest role is below or equal to the role you are trying to set. I cannot assign it.")
+        if ctx.author != ctx.guild.owner and role >= ctx.author.top_role:
+            return await ctx.send("❌ You cannot set a role that is higher than or equal to your own top role.")
             
         await self.config.guild(ctx.guild).success_role.set(role.id)
         await ctx.send(f"✅ Success role set to `{role.name}`.")
