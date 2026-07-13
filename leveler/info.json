@@ -1,0 +1,11 @@
+{
+    "author": ["Antigravity", "Dabblecraft2DevTeam"],
+    "name": "Leveler",
+    "install_msg": "Thanks for installing Leveler! Use `[p]levelset` to configure the cog.",
+    "short": "A highly customizable leveling cog with image generation and economy integration.",
+    "description": "A leveling cog inspired by Mee6 and Stevy's leveler. Features custom profile and level-up cards, XP scaling, Red economy integration for cosmetics, and an API for other cogs.",
+    "tags": ["leveling", "economy", "images", "profiles"],
+    "requirements": ["Pillow", "aiosqlite", "aiomysql"],
+    "end_user_data_statement": "This cog stores user IDs, guild IDs, XP counts, and cosmetic preferences. This data can be deleted using Red's built-in data deletion commands.",
+    "min_bot_version": "3.5.0"
+}
