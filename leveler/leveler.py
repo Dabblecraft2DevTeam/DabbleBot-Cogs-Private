@@ -24,6 +24,9 @@ class Leveler(CommandsMixin, commands.Cog):
             "xp_max": 25,
             "algorithm": "mee6",
             "is_enabled": False,
+            "max_level": 0,
+            "rank_reset_enabled": False,
+            "rank_reset_price": 10000,
             "shop_colors": [
                 {"label": "Red", "value": "#FF0000", "price": 500},
                 {"label": "Blue", "value": "#0000FF", "price": 500},
@@ -108,14 +111,17 @@ class Leveler(CommandsMixin, commands.Cog):
         self._cooldowns[guild.id][user.id] = now
         xp_min = await self.config.guild(guild).xp_min()
         xp_max = await self.config.guild(guild).xp_max()
-        gained_xp = random.randint(xp_min, xp_max)
+        xp_amount = random.randint(xp_min, xp_max)
         
         # Use our DB to add XP and get new level
         old_data = await self.db.get_user(guild.id, user.id)
         old_level = old_data["level"]
         
         algorithm = await self.config.guild(guild).algorithm()
-        new_xp, new_level = await self.db.add_user_xp(guild.id, user.id, gained_xp, algorithm)
+        max_level = await self.config.guild(guild).max_level()
+        
+        # Add XP
+        new_xp, new_level = await self.db.add_user_xp(guild.id, user.id, xp_amount, algorithm, max_level)
         
         # Check for level up
         if new_level > old_level:

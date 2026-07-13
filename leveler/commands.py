@@ -1,6 +1,6 @@
 import discord
 import re
-from redbot.core import commands, app_commands
+from redbot.core import commands, app_commands, bank
 from .image_gen import generate_profile_card
 from .ui import LeaderboardPaginationView, LevelShopView
 
@@ -131,6 +131,44 @@ class CommandsMixin:
         view = LevelShopView(self, ctx.author, self.db, item_type=item_type, config_options=options)
         await ctx.send(embed=embed, view=view)
 
+    @commands.hybrid_command(name="resetrank", description="Reset your rank and start over (costs credits if enabled).")
+    async def resetrank(self, ctx: commands.Context):
+        settings = await self.config.guild(ctx.guild).all()
+        if not settings["is_enabled"]:
+            return await ctx.send("The leveling system is currently disabled on this server.")
+            
+        if not settings.get("rank_reset_enabled"):
+            return await ctx.send("Rank resets are not enabled on this server.")
+            
+        max_level = settings.get("max_level", 0)
+        user_data = await self.db.get_user(ctx.guild.id, ctx.author.id)
+        
+        if max_level > 0 and user_data["level"] < max_level:
+            return await ctx.send(f"You must reach the maximum level ({max_level}) to reset your rank!")
+            
+        price = settings.get("rank_reset_price", 0)
+        
+        if price > 0:
+            if not await bank.can_spend(ctx.author, price):
+                return await ctx.send(f"You don't have enough credits! A rank reset costs {price} credits.")
+            await bank.withdraw_credits(ctx.author, price)
+            
+        # Reset XP and Level in DB
+        # Since add_user_xp adds xp, we just manually update the DB to 0 for this user.
+        # update_user_cosmetics isn't meant for XP.
+        if hasattr(self.db, "conn"): # sqlite
+            await self.db.conn.execute("UPDATE users SET xp = 0, level = 0 WHERE guild_id = ? AND user_id = ?", (ctx.guild.id, ctx.author.id))
+            await self.db.conn.commit()
+        else: # mysql
+            async with self.db.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE users SET xp = 0, level = 0 WHERE guild_id = %s AND user_id = %s", (ctx.guild.id, ctx.author.id))
+                    
+        msg = f"🎉 Your rank has been successfully reset!"
+        if price > 0:
+            msg += f" (Cost: {price} credits)"
+        await ctx.send(msg)
+
     @commands.group(name="levelset")
     @commands.admin_or_permissions(manage_guild=True)
     async def levelset(self, ctx: commands.Context):
@@ -199,15 +237,36 @@ class CommandsMixin:
         )
         
         embed.add_field(
-            name="6. Moderation Tools",
+            name="6. Moderation & Features",
             value=(
                 "• `[p]levelset addxp <user> <amount>`: Manually grant XP to a user.\n"
-                "• `[p]levelset resetbio <user>`: Wipe an inappropriate user bio."
+                "• `[p]levelset resetbio <user>`: Wipe an inappropriate user bio.\n"
+                "• `[p]levelset maxlevel <level>`: Set the maximum level users can reach.\n"
+                "• `[p]levelset rankreset <True/False>`: Enable the `[p]resetrank` command for max level users.\n"
+                "• `[p]levelset rankresetprice <price>`: Set the credit cost to reset rank."
             ),
             inline=False
         )
 
         await ctx.send(embed=embed)
+
+    @levelset.command(name="maxlevel")
+    async def levelset_maxlevel(self, ctx: commands.Context, level: int):
+        """Set the maximum level a user can reach (0 for infinite)."""
+        await self.config.guild(ctx.guild).max_level.set(level)
+        await ctx.send(f"Max level set to **{'Infinite' if level <= 0 else level}**.")
+
+    @levelset.command(name="rankreset")
+    async def levelset_rankreset(self, ctx: commands.Context, toggle: bool):
+        """Enable or disable the [p]resetrank command for max level users."""
+        await self.config.guild(ctx.guild).rank_reset_enabled.set(toggle)
+        await ctx.send(f"Rank reset command has been **{'Enabled' if toggle else 'Disabled'}**.")
+
+    @levelset.command(name="rankresetprice")
+    async def levelset_rankresetprice(self, ctx: commands.Context, price: int):
+        """Set the credit cost to use the [p]resetrank command."""
+        await self.config.guild(ctx.guild).rank_reset_price.set(price)
+        await ctx.send(f"Rank reset price set to **{price} credits**.")
 
     @levelset.command(name="channel")
     async def levelset_channel(self, ctx: commands.Context, channel: discord.TextChannel = None):
@@ -247,6 +306,10 @@ class CommandsMixin:
         embed.add_field(name="XP Min", value=str(settings['xp_min']))
         embed.add_field(name="XP Max", value=str(settings['xp_max']))
         embed.add_field(name="Algorithm", value=str(settings['algorithm']).capitalize())
+        embed.add_field(name="Max Level", value=str(settings['max_level']) if settings.get('max_level') else "Infinite")
+        embed.add_field(name="Rank Reset", value="Enabled" if settings.get('rank_reset_enabled') else "Disabled")
+        if settings.get('rank_reset_enabled'):
+            embed.add_field(name="Reset Price", value=f"{settings.get('rank_reset_price')} credits")
         embed.add_field(name="Status", value="Enabled" if settings['is_enabled'] else "Disabled")
         
         await ctx.send(embed=embed)

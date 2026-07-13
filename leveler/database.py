@@ -115,19 +115,30 @@ class SQLiteDB(BaseDB):
                 break
         return level
 
-    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6") -> tuple[int, int]:
-        current = await self.get_user(guild_id, user_id)
-        new_xp = current["xp"] + amount
-        new_level = await self._calculate_level(new_xp, algorithm)
-        
-        await self.conn.execute(
-            """
-            INSERT INTO users (guild_id, user_id, xp, level)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(guild_id, user_id) DO UPDATE SET xp = excluded.xp, level = excluded.level
-            """,
-            (guild_id, user_id, new_xp, new_level)
-        )
+    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6", max_level: int = 0) -> tuple[int, int]:
+        async with self.conn.execute("SELECT xp, level FROM users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                current_xp, current_level = row
+                new_xp = current_xp + amount
+                new_level = await self._calculate_level(new_xp, algorithm)
+                if max_level > 0 and new_level > max_level:
+                    new_level = max_level
+                
+                await self.conn.execute(
+                    "UPDATE users SET xp = ?, level = ? WHERE guild_id = ? AND user_id = ?",
+                    (new_xp, new_level, guild_id, user_id)
+                )
+            else:
+                new_xp = amount
+                new_level = await self._calculate_level(new_xp, algorithm)
+                if max_level > 0 and new_level > max_level:
+                    new_level = max_level
+                
+                await self.conn.execute(
+                    "INSERT INTO users (guild_id, user_id, xp, level) VALUES (?, ?, ?, ?)",
+                    (guild_id, user_id, new_xp, new_level)
+                )
         await self.conn.commit()
         return new_xp, new_level
 
@@ -254,10 +265,12 @@ class MySQLDB(BaseDB):
                 break
         return level
 
-    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6") -> tuple[int, int]:
+    async def add_user_xp(self, guild_id: int, user_id: int, amount: int, algorithm: str = "mee6", max_level: int = 0) -> tuple[int, int]:
         current = await self.get_user(guild_id, user_id)
         new_xp = current["xp"] + amount
         new_level = await self._calculate_level(new_xp, algorithm)
+        if max_level > 0 and new_level > max_level:
+            new_level = max_level
         
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
