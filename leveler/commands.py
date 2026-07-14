@@ -35,13 +35,14 @@ class CommandsMixin:
             except:
                 pass
                 
-        # Fetch prestige URL if available
-        prestige_url = ""
-        if user_data.get("prestige", 0) > 0:
-            milestones = await self.config.guild(ctx.guild).prestige_milestones()
-            prestige_str = str(user_data["prestige"])
-            if prestige_str in milestones and isinstance(milestones[prestige_str], dict):
-                prestige_url = milestones[prestige_str].get("image_url", "")
+        # Fetch all unlocked prestige badge URLs
+        prestige_urls = []
+        milestones = await self.config.guild(ctx.guild).prestige_milestones()
+        for lvl_str in sorted([int(k) for k in milestones.keys()]):
+            if lvl_str <= user_data["level"]:
+                data = milestones[str(lvl_str)]
+                if isinstance(data, dict) and data.get("image_url"):
+                    prestige_urls.append(data["image_url"])
 
         img_bytes = await generate_profile_card(
             user.display_name,
@@ -53,9 +54,8 @@ class CommandsMixin:
             user_data["bar_color"],
             user_data.get("bio", ""),
             user_data.get("background_id", "default"),
-            prestige_url
+            prestige_urls
         )
-        
         file = discord.File(img_bytes, filename="profile.png")
         await ctx.send(file=file)
 

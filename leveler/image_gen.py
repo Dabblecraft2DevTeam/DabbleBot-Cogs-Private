@@ -24,9 +24,19 @@ def ensure_assets():
 # Ensure assets on load
 ensure_assets()
 
-def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_url: str = "") -> io.BytesIO:
+def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_urls: list = None) -> io.BytesIO:
     """Synchronous function to generate a profile card."""
-    width, height = 950, 280
+    if prestige_urls is None:
+        prestige_urls = []
+        
+    width = 1100
+    base_height = 250
+    
+    # Calculate rows needed for badges
+    badges_per_row = (width - 220) // 100 # 80px badge + 20px spacing
+    rows = (len(prestige_urls) - 1) // badges_per_row + 1 if prestige_urls else 0
+    height = base_height + (rows * 100)
+    
     # Background (Dark gray if default)
     img = Image.new("RGBA", (width, height), (35, 39, 42, 255))
     
@@ -85,13 +95,20 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
     tier_xp = required_xp - current_level_xp_base
     progress = max(0, min(1, progress_xp / tier_xp)) if tier_xp > 0 else 1
 
-    # Draw XP text
+    # Draw XP text (right-aligned to the bar)
     xp_text = f"{xp} / {required_xp} XP"
-    draw.text((720, 160), xp_text, font=font_small, fill=(200, 200, 200, 255))
+    try:
+        bbox = draw.textbbox((0, 0), xp_text, font=font_small)
+        text_w = bbox[2] - bbox[0]
+    except AttributeError: # Fallback for older PIL versions
+        text_w = len(xp_text) * 12
+        
+    bar_x, bar_y = 220, 190
+    bar_width, bar_height = 840, 20
+    
+    draw.text((bar_x + bar_width - text_w, 160), xp_text, font=font_small, fill=(200, 200, 200, 255))
 
     # Draw Progress Bar
-    bar_x, bar_y = 220, 190
-    bar_width, bar_height = 690, 20
     draw.rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], fill=(50, 55, 60, 255), outline=(0, 0, 0, 255))
     
     # Draw filled portion
@@ -99,18 +116,26 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
     if fill_width > 0:
         draw.rectangle([bar_x, bar_y, bar_x + fill_width, bar_y + bar_height], fill=bar_color)
 
-    # Draw Prestige Badge if available (drawn last so it can overlap if needed)
-    if prestige_url and prestige_url.startswith("http"):
+    # Draw Prestige Badges in a grid
+    current_x = 220
+    current_y = 230
+    for url in prestige_urls:
+        if not url.startswith("http"): continue
         try:
-            clean_url = prestige_url.strip("<>}{")
+            clean_url = url.strip("<>}{")
             clean_url = clean_url.replace("%7D", "")
             req = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=3) as resp:
                 badge = Image.open(io.BytesIO(resp.read())).convert("RGBA")
-            badge = badge.resize((60, 60))
-            img.paste(badge, (850, 215), badge)
+            badge = badge.resize((80, 80))
+            img.paste(badge, (current_x, current_y), badge)
+            
+            current_x += 100
+            if current_x + 80 > width - 40:
+                current_x = 220
+                current_y += 100
         except Exception as e:
-            print(f"Failed to load prestige badge from {prestige_url}: {e}")
+            print(f"Failed to load prestige badge from {url}: {e}")
 
     output = io.BytesIO()
     img.save(output, format="PNG")
@@ -119,7 +144,7 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
 
 def generate_levelup_card_sync(username: str, avatar_bytes: bytes, new_level: int) -> io.BytesIO:
     """Synchronous function to generate a level-up notification."""
-    width, height = 550, 120
+    width, height = 600, 120
     img = Image.new("RGBA", (width, height), (35, 39, 42, 255))
     draw = ImageDraw.Draw(img)
 
@@ -153,10 +178,10 @@ def generate_levelup_card_sync(username: str, avatar_bytes: bytes, new_level: in
     output.seek(0)
     return output
 
-async def generate_profile_card(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_url: str = "") -> io.BytesIO:
+async def generate_profile_card(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_urls: list = None) -> io.BytesIO:
     """Async wrapper for profile card generation."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, generate_profile_card_sync, username, avatar_bytes, xp, level, rank, title_color, bar_color, bio, background_id, prestige_url)
+    return await loop.run_in_executor(executor, generate_profile_card_sync, username, avatar_bytes, xp, level, rank, title_color, bar_color, bio, background_id, prestige_urls)
 
 async def generate_levelup_card(username: str, avatar_bytes: bytes, new_level: int) -> io.BytesIO:
     """Async wrapper for level-up card generation."""
