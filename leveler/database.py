@@ -169,7 +169,7 @@ class SQLiteDB(BaseDB):
         set_clauses = []
         values = []
         for k, v in kwargs.items():
-            if k in ("background_id", "title_color", "bar_color"):
+            if k in ("background_id", "title_color", "bar_color", "bio", "prestige"):
                 set_clauses.append(f"{k} = ?")
                 values.append(v)
                 
