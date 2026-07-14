@@ -345,8 +345,16 @@ class CommandsMixin:
     async def levelset_addxp(self, ctx: commands.Context, user: discord.Member, amount: int):
         """Add XP to a user manually."""
         algorithm = await self.config.guild(ctx.guild).algorithm()
-        new_xp, new_level = await self.db.add_user_xp(ctx.guild.id, user.id, amount, algorithm)
+        max_level = await self.config.guild(ctx.guild).max_level()
+        
+        old_data = await self.db.get_user(ctx.guild.id, user.id)
+        old_level = old_data["level"]
+        
+        new_xp, new_level = await self.db.add_user_xp(ctx.guild.id, user.id, amount, algorithm, max_level)
         await ctx.send(f"Added {amount} XP to {user.display_name}. They are now at {new_xp} XP (Level {new_level}).")
+        
+        if new_level > old_level:
+            await self.handle_level_up(ctx.guild, user, new_level, old_level)
 
     @levelset.group(name="shop")
     async def levelset_shop(self, ctx: commands.Context):

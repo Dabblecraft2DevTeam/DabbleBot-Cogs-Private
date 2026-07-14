@@ -96,6 +96,11 @@ class Leveler(CommandsMixin, commands.Cog):
         guild = message.guild
         user = message.author
         
+        # Ignore commands
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
+            return
+        
         # Check cooldown
         now = time.time()
         cooldown = await self.config.guild(guild).message_cooldown()
@@ -125,9 +130,9 @@ class Leveler(CommandsMixin, commands.Cog):
         
         # Check for level up
         if new_level > old_level:
-            await self.handle_level_up(guild, user, new_level)
+            await self.handle_level_up(guild, user, new_level, old_level)
 
-    async def handle_level_up(self, guild: discord.Guild, user: discord.Member, new_level: int):
+    async def handle_level_up(self, guild: discord.Guild, user: discord.Member, new_level: int, old_level: int = 0):
         # 1. Economy reward
         reward = await self.config.guild(guild).level_up_reward()
         if reward > 0:
@@ -158,10 +163,16 @@ class Leveler(CommandsMixin, commands.Cog):
                 
             # Prestige Check
             milestones = await self.config.guild(guild).prestige_milestones()
-            str_level = str(new_level)
-            if str_level in milestones:
-                await self.db.update_user_cosmetics(guild.id, user.id, prestige=new_level)
-                badge_data = milestones[str_level]
+            highest_milestone = None
+            
+            # Check all levels we might have skipped over
+            for lvl in range(old_level + 1, new_level + 1):
+                if str(lvl) in milestones:
+                    highest_milestone = str(lvl)
+            
+            if highest_milestone is not None:
+                await self.db.update_user_cosmetics(guild.id, user.id, prestige=int(highest_milestone))
+                badge_data = milestones[highest_milestone]
                 if isinstance(badge_data, dict):
                     badge_emoji = badge_data.get("emoji", "")
                     msg += f" You also earned a prestige badge {badge_emoji}!"
