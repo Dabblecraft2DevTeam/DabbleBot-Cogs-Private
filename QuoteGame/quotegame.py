@@ -98,6 +98,11 @@ class QuoteGame(commands.Cog):
     @quotegame.command()
     async def setwinnerrole(self, ctx, role: discord.Role):
         """Set the role given to winners."""
+        if role >= ctx.guild.me.top_role:
+            return await ctx.send("I cannot assign this role because it is higher than or equal to my top role.")
+        if ctx.author != ctx.guild.owner and role >= ctx.author.top_role:
+            return await ctx.send("You cannot assign a role higher than or equal to your top role.")
+
         await self.config.guild(ctx.guild).winner_role_id.set(role.id)
         await ctx.send(f"Winner role set to {role.mention}.")
 
