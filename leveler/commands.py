@@ -273,22 +273,31 @@ class CommandsMixin:
         """Sets the channel for level-up messages. Leave blank to disable."""
         if channel:
             await self.config.guild(ctx.guild).level_up_channel.set(channel.id)
-            await ctx.send(f"Level up messages will now be sent in {channel.mention}.")
+            await ctx.send(f"Level-up messages will be sent to {channel.mention}.")
         else:
             await self.config.guild(ctx.guild).level_up_channel.set(None)
-            await ctx.send("Level up messages have been disabled.")
+            await ctx.send("Level-up messages disabled.")
+
+    @levelset.command(name="range")
+    async def levelset_range(self, ctx: commands.Context, min_xp: int, max_xp: int):
+        """Set the random XP amount granted per message."""
+        if min_xp > max_xp:
+            return await ctx.send("Min XP cannot be greater than Max XP!")
+        await self.config.guild(ctx.guild).xp_min.set(min_xp)
+        await self.config.guild(ctx.guild).xp_max.set(max_xp)
+        await ctx.send(f"XP range set to **{min_xp} - {max_xp}**.")
 
     @levelset.command(name="cooldown")
     async def levelset_cooldown(self, ctx: commands.Context, seconds: int):
-        """Sets the cooldown between XP gains (in seconds). Default is 60."""
+        """Set how often users can gain XP from messages."""
         await self.config.guild(ctx.guild).message_cooldown.set(seconds)
-        await ctx.send(f"XP cooldown set to {seconds} seconds.")
+        await ctx.send(f"XP cooldown set to **{seconds} seconds**.")
 
-    @levelset.command(name="economy")
-    async def levelset_economy(self, ctx: commands.Context, amount: int):
-        """Sets the flat credit reward given on level up."""
+    @levelset.command(name="reward")
+    async def levelset_reward(self, ctx: commands.Context, amount: int):
+        """Set how many economy credits users earn when they level up."""
         await self.config.guild(ctx.guild).level_up_reward.set(amount)
-        await ctx.send(f"Users will now receive {amount} credits when they level up.")
+        await ctx.send(f"Level up reward set to **{amount} credits**.")
 
     @levelset.command(name="show")
     async def levelset_show(self, ctx: commands.Context):
