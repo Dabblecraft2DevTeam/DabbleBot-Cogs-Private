@@ -1,4 +1,5 @@
 import discord
+import asyncio
 import re
 from redbot.core import commands, app_commands, bank
 from .image_gen import generate_profile_card
@@ -43,6 +44,10 @@ class CommandsMixin:
                 data = milestones[str(lvl_str)]
                 if isinstance(data, dict) and data.get("image_url"):
                     prestige_urls.append(data["image_url"])
+                    
+        # Append legacy badges that can no longer be earned
+        legacy_badges = await self.config.member(user).legacy_badges()
+        prestige_urls.extend(legacy_badges)
 
         img_bytes = await generate_profile_card(
             user.display_name,
@@ -231,7 +236,9 @@ class CommandsMixin:
             name="5. Prestige Badges",
             value=(
                 "Reward dedicated users with prestige badges!\n"
-                "• `[p]levelset prestige add <level> <emoji> <image_url>`: Adds a badge for reaching a level. The emoji appears in `[p]top`, and the image appears on their `[p]profile` card."
+                "• `[p]levelset prestige add <level> <emoji> <image_url>`: Adds a badge for reaching a level. The emoji appears in `[p]top`, and the image appears on their `[p]profile` card.\n"
+                "• `[p]levelset prestige edit <level> <emoji> <image_url>`: Edit the emoji and image of an existing badge.\n"
+                "• `[p]levelset prestige remove <level>`: Remove a badge. You will be asked if you want to also revoke it from users who already earned it, or let them keep it as a legacy badge."
             ),
             inline=False
         )
@@ -386,6 +393,50 @@ class CommandsMixin:
         async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
             milestones[str(level)] = {"emoji": emoji, "image_url": image_url}
         await ctx.send(f"Added prestige badge for reaching level {level}.")
+
+    @levelset_prestige.command(name="edit")
+    async def prestige_edit(self, ctx: commands.Context, level: int, emoji: str, image_url: str):
+        """Edit an existing prestige badge. Usage: [p]levelset prestige edit <level> <emoji> <image_url>"""
+        async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
+            if str(level) not in milestones:
+                return await ctx.send(f"No prestige badge found for level {level}. Use `add` instead.")
+            milestones[str(level)] = {"emoji": emoji, "image_url": image_url}
+        await ctx.send(f"Edited prestige badge for level {level}.")
+
+    @levelset_prestige.command(name="remove")
+    async def prestige_remove(self, ctx: commands.Context, level: int):
+        """Remove a prestige badge."""
+        async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
+            if str(level) not in milestones:
+                return await ctx.send(f"No prestige badge found for level {level}.")
+                
+            badge_url = milestones[str(level)].get("image_url")
+            
+            await ctx.send(f"Do you want to remove the level {level} badge from users who already earned it? (yes/no)")
+            try:
+                msg = await self.bot.wait_for("message", check=lambda m: m.author == ctx.author and m.channel == ctx.channel, timeout=30.0)
+                if msg.content.lower() in ("yes", "y"):
+                    del milestones[str(level)]
+                    await ctx.send(f"Badge for level {level} removed globally.")
+                elif msg.content.lower() in ("no", "n"):
+                    # Add to legacy badges for all users who have it
+                    users = await self.db.get_leaderboard(ctx.guild.id, limit=999999)
+                    count = 0
+                    for u in users:
+                        user_id = u[0]
+                        u_level = u[2]
+                        if u_level >= level:
+                            async with self.config.member_from_ids(ctx.guild.id, user_id).legacy_badges() as lb:
+                                if badge_url and badge_url not in lb:
+                                    lb.append(badge_url)
+                            count += 1
+                    
+                    del milestones[str(level)]
+                    await ctx.send(f"Badge for level {level} removed from config, but kept for {count} legacy users.")
+                else:
+                    return await ctx.send("Invalid response. Cancelled.")
+            except asyncio.TimeoutError:
+                return await ctx.send("Prompt timed out. Cancelled.")
 
     @commands.group(name="levelerdb")
     @commands.is_owner()
