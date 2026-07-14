@@ -26,7 +26,7 @@ ensure_assets()
 
 def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, level: int, rank: int, title_color: str, bar_color: str, bio: str, background_id: str, prestige_url: str = "") -> io.BytesIO:
     """Synchronous function to generate a profile card."""
-    width, height = 800, 250
+    width, height = 950, 280
     # Background (Dark gray if default)
     img = Image.new("RGBA", (width, height), (35, 39, 42, 255))
     
@@ -78,19 +78,6 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
     if bio:
         draw.text((220, 140), bio, font=font_small, fill=(200, 200, 200, 255))
         
-    # Draw Prestige Badge if available
-    if prestige_url and prestige_url.startswith("http"):
-        try:
-            clean_url = prestige_url.strip("<>}{")
-            clean_url = clean_url.replace("%7D", "")
-            req = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                badge = Image.open(io.BytesIO(resp.read())).convert("RGBA")
-            badge = badge.resize((50, 50))
-            img.paste(badge, (700, 30), badge)
-        except Exception as e:
-            print(f"Failed to load prestige badge from {prestige_url}: {e}")
-
     # Calculate XP progress (Mee6 formula approximate next level)
     required_xp = int((5/6) * (level + 1) * (2 * ((level + 1)**2) + 27 * (level + 1) + 91))
     current_level_xp_base = int((5/6) * level * (2 * (level**2) + 27 * level + 91)) if level > 0 else 0
@@ -100,17 +87,30 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
 
     # Draw XP text
     xp_text = f"{xp} / {required_xp} XP"
-    draw.text((600, 160), xp_text, font=font_small, fill=(200, 200, 200, 255))
+    draw.text((720, 160), xp_text, font=font_small, fill=(200, 200, 200, 255))
 
     # Draw Progress Bar
     bar_x, bar_y = 220, 190
-    bar_width, bar_height = 540, 20
+    bar_width, bar_height = 690, 20
     draw.rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], fill=(50, 55, 60, 255), outline=(0, 0, 0, 255))
     
     # Draw filled portion
     fill_width = int(bar_width * progress)
     if fill_width > 0:
         draw.rectangle([bar_x, bar_y, bar_x + fill_width, bar_y + bar_height], fill=bar_color)
+
+    # Draw Prestige Badge if available (drawn last so it can overlap if needed)
+    if prestige_url and prestige_url.startswith("http"):
+        try:
+            clean_url = prestige_url.strip("<>}{")
+            clean_url = clean_url.replace("%7D", "")
+            req = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                badge = Image.open(io.BytesIO(resp.read())).convert("RGBA")
+            badge = badge.resize((60, 60))
+            img.paste(badge, (850, 215), badge)
+        except Exception as e:
+            print(f"Failed to load prestige badge from {prestige_url}: {e}")
 
     output = io.BytesIO()
     img.save(output, format="PNG")
@@ -119,7 +119,7 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
 
 def generate_levelup_card_sync(username: str, avatar_bytes: bytes, new_level: int) -> io.BytesIO:
     """Synchronous function to generate a level-up notification."""
-    width, height = 400, 120
+    width, height = 550, 120
     img = Image.new("RGBA", (width, height), (35, 39, 42, 255))
     draw = ImageDraw.Draw(img)
 
@@ -142,8 +142,8 @@ def generate_levelup_card_sync(username: str, avatar_bytes: bytes, new_level: in
             pass
 
     display_name = username
-    if len(display_name) > 15:
-        display_name = display_name[:12] + "..."
+    if len(display_name) > 25:
+        display_name = display_name[:22] + "..."
 
     draw.text((120, 30), f"Level Up, {display_name}!", font=font_large, fill=(255, 215, 0, 255))
     draw.text((120, 70), f"You are now level {new_level}!", font=font_small, fill=(200, 200, 200, 255))
