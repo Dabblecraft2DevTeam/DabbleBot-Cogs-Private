@@ -3,7 +3,7 @@ import asyncio
 import re
 from redbot.core import commands, app_commands, bank
 from .image_gen import generate_profile_card
-from .ui import LeaderboardPaginationView, LevelShopView
+from .ui import LeaderboardPaginationView, MainShopView
 
 URL_REGEX = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
@@ -119,22 +119,13 @@ class CommandsMixin:
             await ctx.send(embed=embeds[0], view=view)
 
     @commands.hybrid_command(name="levelshop", description="Buy cosmetics for your profile card.")
-    async def levelshop(self, ctx: commands.Context, shop_type: str = "colors"):
-        """Buy colors or backgrounds. Usage: [p]levelshop colors OR [p]levelshop backgrounds"""
+    async def levelshop(self, ctx: commands.Context):
+        """Open the interactive shop and inventory menu."""
         if not await self.config.guild(ctx.guild).is_enabled():
             return await ctx.send("The leveling system is currently disabled on this server.")
             
-        embed = discord.Embed(
-            title=f"Leveler Cosmetics Shop - {shop_type.capitalize()}",
-            description="Use the dropdown below to purchase custom cosmetics using server credits.",
-            color=await ctx.embed_color()
-        )
-        
-        item_type = "background_id" if shop_type.lower().startswith("bg") or shop_type.lower() == "backgrounds" else "bar_color"
-        options = await self.config.guild(ctx.guild).shop_backgrounds() if item_type == "background_id" else await self.config.guild(ctx.guild).shop_colors()
-        
-        view = LevelShopView(self, ctx.author, self.db, item_type=item_type, config_options=options)
-        await ctx.send(embed=embed, view=view)
+        view = MainShopView(self, ctx.author, self.db, self.config)
+        await ctx.send(content="**🛒 Leveler Shop**\nChoose a category below:", view=view)
 
     @commands.hybrid_command(name="resetrank", description="Reset your rank and start over (costs credits if enabled).")
     async def resetrank(self, ctx: commands.Context):
@@ -381,6 +372,75 @@ class CommandsMixin:
         async with self.config.guild(ctx.guild).shop_backgrounds() as bgs:
             bgs.append({"label": name, "value": url, "price": price})
         await ctx.send(f"Added background '{name}' for {price} credits.")
+
+    @levelset_shop.command(name="list")
+    async def shop_list(self, ctx: commands.Context):
+        """List all items in the shop."""
+        colors = await self.config.guild(ctx.guild).shop_colors()
+        bgs = await self.config.guild(ctx.guild).shop_backgrounds()
+        
+        embed = discord.Embed(title="Shop Items", color=await ctx.embed_color())
+        
+        c_text = ""
+        for i, c in enumerate(colors):
+            c_text += f"{i+1}. **{c['label']}** (`{c['value']}`) - {c['price']}c\n"
+        embed.add_field(name="Colors", value=c_text or "None", inline=False)
+        
+        b_text = ""
+        for i, b in enumerate(bgs):
+            b_text += f"{i+1}. **{b['label']}** (`{b['value']}`) - {b['price']}c\n"
+        embed.add_field(name="Backgrounds", value=b_text or "None", inline=False)
+        
+        await ctx.send(embed=embed)
+
+    @levelset_shop.command(name="edit")
+    async def shop_edit(self, ctx: commands.Context, category: str, index: int, name: str, value: str, price: int):
+        """Edit a shop item by index. Example: [p]levelset shop edit colors 1 "New Name" #FFFFFF 1000"""
+        category = category.lower()
+        if category in ("bg", "background", "backgrounds"): category = "backgrounds"
+        elif category in ("color", "colors"): category = "colors"
+        else: return await ctx.send("Category must be 'colors' or 'backgrounds'.")
+        
+        async with getattr(self.config.guild(ctx.guild), f"shop_{category}")() as items:
+            if index < 1 or index > len(items):
+                return await ctx.send("Invalid index. Check `[p]levelset shop list`.")
+            items[index - 1] = {"label": name, "value": value, "price": price}
+            
+        await ctx.send(f"Edited item #{index} in {category}.")
+
+    @levelset_shop.command(name="remove")
+    async def shop_remove(self, ctx: commands.Context, category: str, index: int):
+        """Remove a shop item by category and index."""
+        category = category.lower()
+        if category in ("bg", "background", "backgrounds"): category = "backgrounds"
+        elif category in ("color", "colors"): category = "colors"
+        else: return await ctx.send("Category must be 'colors' or 'backgrounds'.")
+            
+        async with getattr(self.config.guild(ctx.guild), f"shop_{category}")() as items:
+            if index < 1 or index > len(items):
+                return await ctx.send("Invalid index. Check `[p]levelset shop list`.")
+            removed_item = items.pop(index - 1)
+            
+        await ctx.send(f"Removed **{removed_item['label']}** from the shop.\nDo you want to revoke this item from all users who already own it? (yes/no)")
+        try:
+            msg = await self.bot.wait_for("message", check=lambda m: m.author == ctx.author and m.channel == ctx.channel, timeout=30.0)
+            if msg.content.lower() in ("yes", "y"):
+                users = await self.db.get_leaderboard(ctx.guild.id, limit=999999)
+                count = 0
+                inv_key = f"inventory_{category}"
+                for u in users:
+                    user_id = u[0]
+                    async with getattr(self.config.member_from_ids(ctx.guild.id, user_id), inv_key)() as inv:
+                        new_inv = [i for i in inv if i["value"] != removed_item["value"]]
+                        if len(new_inv) < len(inv):
+                            count += 1
+                            inv.clear()
+                            inv.extend(new_inv)
+                await ctx.send(f"Revoked item from {count} users.")
+            else:
+                await ctx.send("Legacy items kept for users who already owned them.")
+        except asyncio.TimeoutError:
+            await ctx.send("Prompt timed out. Item removed from shop but kept for legacy users by default.")
 
     @levelset.group(name="prestige")
     async def levelset_prestige(self, ctx: commands.Context):

@@ -52,7 +52,7 @@ class Leveler(CommandsMixin, commands.Cog):
         
         self.config.register_guild(**default_guild)
         self.config.register_global(**default_global)
-        self.config.register_member(legacy_badges=[])
+        self.config.register_member(legacy_badges=[], inventory_colors=[], inventory_backgrounds=[])
         
         self.db = None
         self.api = None
