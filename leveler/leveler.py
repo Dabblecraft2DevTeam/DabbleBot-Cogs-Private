@@ -161,6 +161,11 @@ class Leveler(CommandsMixin, commands.Cog):
             str_level = str(new_level)
             if str_level in milestones:
                 await self.db.update_user_cosmetics(guild.id, user.id, prestige=new_level)
-                msg += f" You also earned a prestige badge {milestones[str_level]}!"
+                badge_data = milestones[str_level]
+                if isinstance(badge_data, dict):
+                    badge_emoji = badge_data.get("emoji", "")
+                    msg += f" You also earned a prestige badge {badge_emoji}!"
+                else:
+                    msg += f" You also earned a prestige badge {badge_data}!"
                 
             await channel.send(content=msg, file=file)
