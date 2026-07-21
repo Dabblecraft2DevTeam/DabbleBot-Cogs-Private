@@ -6,6 +6,6 @@
     "description": "A leveling cog inspired by Mee6 and Stevy's leveler. Features custom profile and level-up cards, XP scaling, Red economy integration for cosmetics, and an API for other cogs.",
     "tags": ["leveling", "economy", "images", "profiles"],
     "requirements": ["Pillow", "aiosqlite", "aiomysql"],
-    "end_user_data_statement": "This cog stores user IDs, guild IDs, XP counts, and cosmetic preferences. This data can be deleted using Red's built-in data deletion commands.",
+    "end_user_data_statement": "This cog stores the following data per user: Discord user ID, guild ID, XP count, level, prestige level, bio text, and cosmetic preferences (background image, title color, bar color). This data is stored in a SQLite database on the server (or MySQL if configured). Data is retained indefinitely until the user requests deletion. Users can request deletion of all their data by running [p]mydata forgetme, which removes all leveling data from the database and config. Users can also request a copy of their data by running [p]mydata getdata.",
     "min_bot_version": "3.5.0"
 }
