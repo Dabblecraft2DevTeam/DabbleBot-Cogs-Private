@@ -34,6 +34,11 @@ class BaseDB(abc.ABC):
     async def update_user_cosmetics(self, guild_id: int, user_id: int, **kwargs):
         pass
 
+    @abc.abstractmethod
+    async def delete_user(self, user_id: int):
+        """Delete all data for a user across all guilds."""
+        pass
+
 class SQLiteDB(BaseDB):
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -178,6 +183,15 @@ class SQLiteDB(BaseDB):
             values.extend([guild_id, user_id])
             await self.conn.execute(query, tuple(values))
             await self.conn.commit()
+
+    async def delete_user(self, user_id: int):
+        """Delete all data for a user across all guilds."""
+        await self.conn.execute(
+            "DELETE FROM users WHERE user_id = ?",
+            (user_id,)
+        )
+        await self.conn.commit()
+        log.info(f"Deleted all leveler data for user_id {user_id} from SQLite.")
 
 
 class MySQLDB(BaseDB):
@@ -325,4 +339,14 @@ class MySQLDB(BaseDB):
                     query = f"UPDATE users SET {', '.join(set_clauses)} WHERE guild_id = %s AND user_id = %s"
                     values.extend([guild_id, user_id])
                     await cur.execute(query, tuple(values))
+
+    async def delete_user(self, user_id: int):
+        """Delete all data for a user across all guilds."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "DELETE FROM users WHERE user_id = %s",
+                    (user_id,)
+                )
+        log.info(f"Deleted all leveler data for user_id {user_id} from MySQL.")
 
