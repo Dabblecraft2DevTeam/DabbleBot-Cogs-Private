@@ -4,6 +4,7 @@ from .database import SQLiteDB, MySQLDB
 from .api import LevelerAPI
 from .commands import CommandsMixin
 from .image_gen import generate_levelup_card
+from typing import Literal
 import time
 import os
 import random
@@ -181,3 +182,42 @@ class Leveler(CommandsMixin, commands.Cog):
                     msg += f" You also earned a prestige badge {badge_data}!"
                 
             await channel.send(content=msg, file=file)
+
+    async def red_get_data_for_user(self, *, user_id: int):
+        """Get all data stored for a user across all guilds."""
+        data = {}
+        # Gather data from SQLite/MySQL database
+        if self.db:
+            for guild in self.bot.guilds:
+                user_data = await self.db.get_user(guild.id, user_id)
+                if user_data["xp"] > 0 or user_data["level"] > 0 or user_data["bio"]:
+                    data[str(guild.id)] = user_data
+
+        # Gather Config member data
+        for guild in self.bot.guilds:
+            member_data = await self.config.member_from_ids(guild.id, user_id).all()
+            if member_data and any(member_data.values()):
+                data.setdefault(str(guild.id), {})["config"] = member_data
+
+        return data
+
+    async def red_delete_data_for_user(self, *, requester: Literal, user_id: int):
+        """Delete all data for a user across all guilds.
+
+        This handles requests from:
+        - discord_deleted_user: User deleted their Discord account
+        - owner: Bot owner triggered deletion
+        - user: User triggered deletion via [p]mydata forgetme
+        - user_strict: User triggered strict deletion
+        """
+        # 1. Delete from SQLite/MySQL database (all guilds)
+        if self.db:
+            await self.db.delete_user(user_id)
+
+        # 2. Delete from Red Config (member scope, all guilds)
+        for guild in self.bot.guilds:
+            await self.config.member_from_ids(guild.id, user_id).clear()
+
+        # 3. Clear in-memory cooldown if present
+        for guild_id in self._cooldowns:
+            self._cooldowns[guild_id].pop(user_id, None)
