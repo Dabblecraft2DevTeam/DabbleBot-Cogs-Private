@@ -3,6 +3,7 @@ from redbot.core import commands, Config
 import aiomysql
 import aiohttp
 import re
+from typing import Literal
 
 class DatabaseConfigModal(discord.ui.Modal, title="Database Configuration"):
     host = discord.ui.TextInput(
@@ -80,6 +81,15 @@ class NBZHCRank(commands.Cog):
             "db_name": ""
         }
         self.config.register_global(**default_global)
+
+    async def red_delete_data_for_user(
+        self,
+        *,
+        requester: Literal["discord_deleted_user", "owner", "user", "user_strict"],
+        user_id: int,
+    ):
+        """This cog does not store any user data."""
+        return
 
     @commands.command()
     @commands.is_owner()

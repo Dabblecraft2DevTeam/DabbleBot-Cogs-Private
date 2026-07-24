@@ -10,7 +10,7 @@
         "rank",
         "nbzhc"
     ],
-    "end_user_data_statement": "This cog stores Discord User IDs, Channel IDs, and Role IDs for configuration and in-memory tracking of active CAPTCHA attempts. This data is not shared.",
+    "end_user_data_statement": "This cog does not store any end user data. It only fetches external data from a MySQL database.",
     "min_bot_version": "3.5.0",
     "max_bot_version": "3.9.9",
     "requirements": [

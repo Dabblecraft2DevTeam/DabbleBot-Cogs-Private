@@ -5,6 +5,7 @@ import random
 import aiohttp
 import re
 from datetime import datetime, timezone
+from typing import Literal
 from .historical_quotes import HISTORICAL_QUOTES
 
 class VotingView(discord.ui.View):
@@ -76,6 +77,39 @@ class QuoteGame(commands.Cog):
     def cog_unload(self):
         if self.loop_task:
             self.loop_task.cancel()
+
+    async def red_delete_data_for_user(
+        self,
+        *,
+        requester: Literal["discord_deleted_user", "owner", "user", "user_strict"],
+        user_id: int,
+    ):
+        """Handle data deletion requests to clear a user's submissions and votes."""
+        all_guilds = await self.config.all_guilds()
+        str_user_id = str(user_id)
+        
+        for guild_id, data in all_guilds.items():
+            current_winners = data.get("current_winners", [])
+            if str_user_id in current_winners:
+                current_winners.remove(str_user_id)
+                await self.config.guild_from_id(guild_id).current_winners.set(current_winners)
+                
+            current_game = data.get("current_game", {})
+            if current_game:
+                game_changed = False
+                
+                answers = current_game.get("answers", {})
+                if str_user_id in answers:
+                    del answers[str_user_id]
+                    game_changed = True
+                    
+                voted_users = current_game.get("voted_users", [])
+                if str_user_id in voted_users:
+                    voted_users.remove(str_user_id)
+                    game_changed = True
+                    
+                if game_changed:
+                    await self.config.guild_from_id(guild_id).current_game.set(current_game)
 
     @commands.group(aliases=["qg"])
     @commands.admin_or_permissions(manage_guild=True)
