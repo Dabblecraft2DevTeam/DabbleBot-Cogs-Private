@@ -369,6 +369,8 @@ class CommandsMixin:
     @levelset_shop.command(name="addbg")
     async def shop_addbg(self, ctx: commands.Context, name: str, url: str, price: int):
         """Add a background URL to the shop."""
+        if not url.startswith(("http://", "https://")) or len(url) > 2048:
+            return await ctx.send("❌ The URL must start with http:// or https:// and be less than 2048 characters.")
         async with self.config.guild(ctx.guild).shop_backgrounds() as bgs:
             bgs.append({"label": name, "value": url, "price": price})
         await ctx.send(f"Added background '{name}' for {price} credits.")
@@ -401,6 +403,9 @@ class CommandsMixin:
         elif category in ("color", "colors"): category = "colors"
         else: return await ctx.send("Category must be 'colors' or 'backgrounds'.")
         
+        if category == "backgrounds" and (not value.startswith(("http://", "https://")) or len(value) > 2048):
+            return await ctx.send("❌ The URL must start with http:// or https:// and be less than 2048 characters.")
+
         async with getattr(self.config.guild(ctx.guild), f"shop_{category}")() as items:
             if index < 1 or index > len(items):
                 return await ctx.send("Invalid index. Check `[p]levelset shop list`.")
@@ -450,6 +455,8 @@ class CommandsMixin:
     @levelset_prestige.command(name="add")
     async def prestige_add(self, ctx: commands.Context, level: int, emoji: str, image_url: str):
         """Add a prestige badge. Usage: [p]levelset prestige add <level> <emoji> <image_url>"""
+        if not image_url.startswith(("http://", "https://")) or len(image_url) > 2048:
+            return await ctx.send("❌ The image_url must start with http:// or https:// and be less than 2048 characters.")
         async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
             milestones[str(level)] = {"emoji": emoji, "image_url": image_url}
         await ctx.send(f"Added prestige badge for reaching level {level}.")
@@ -457,6 +464,8 @@ class CommandsMixin:
     @levelset_prestige.command(name="edit")
     async def prestige_edit(self, ctx: commands.Context, level: int, emoji: str, image_url: str):
         """Edit an existing prestige badge. Usage: [p]levelset prestige edit <level> <emoji> <image_url>"""
+        if not image_url.startswith(("http://", "https://")) or len(image_url) > 2048:
+            return await ctx.send("❌ The image_url must start with http:// or https:// and be less than 2048 characters.")
         async with self.config.guild(ctx.guild).prestige_milestones() as milestones:
             if str(level) not in milestones:
                 return await ctx.send(f"No prestige badge found for level {level}. Use `add` instead.")
