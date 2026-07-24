@@ -191,6 +191,17 @@ class CaptchaGate(commands.Cog):
     def cog_unload(self):
         self.kick_task.cancel()
 
+    async def red_delete_data_for_user(
+        self,
+        *,
+        requester: Literal["discord_deleted_user", "owner", "user", "user_strict"],
+        user_id: int,
+    ):
+        """Handle data deletion requests by clearing any active captchas for the user."""
+        keys_to_remove = [k for k in self.active_captchas.keys() if k[1] == user_id]
+        for key in keys_to_remove:
+            self.active_captchas.pop(key, None)
+
 # ----------------------------------------------------------------
 # --- Utility Functions ---
 # ----------------------------------------------------------------

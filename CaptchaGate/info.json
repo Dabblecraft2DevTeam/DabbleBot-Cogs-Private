@@ -5,7 +5,7 @@
   "install_msg": "Thanks for installing CaptchaGate! Use [p]captchaset to begin configuration.",
   "short": "Captcha verification for new members.",
   "tags": ["captcha", "verification", "security"],
-  "end_user_data_statement": "This cog stores Discord User IDs, Channel IDs, and Role IDs for configuration and in-memory tracking of active CAPTCHA attempts. This data is not shared.",
+  "end_user_data_statement": "This cog does not persistently store any end user data. It only stores User IDs in-memory temporarily during the CAPTCHA verification process.",
   "min_bot_version": "3.5.0",
   "max_bot_version": "3.9.9"
 }
