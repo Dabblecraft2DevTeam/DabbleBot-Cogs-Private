@@ -512,6 +512,11 @@ class CaptchaGate(commands.Cog):
 # ----------------------------------------------------------------
 
     @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        if (member.guild.id, member.id) in self.active_captchas:
+            await self._cleanup_messages_or_channel(member)
+
+    @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         if member.bot: return
         guild_settings = await self.config.guild(member.guild).all()
@@ -548,6 +553,24 @@ class CaptchaGate(commands.Cog):
                     if (time.time() - start_time) > kick_timeout:
                         await self._kick_user(member, f"Timed out waiting for CAPTCHA completion after {kick_timeout} seconds.")
                 else:
+                    # User left the server, clean up manually
+                    guild_settings = await self.config.guild(guild).all()
+                    mode = guild_settings["verification_mode"]
+                    if mode in ["PUBLIC", "DM", "PRIVATE_CHANNEL"]:
+                        channel_id = guild_settings["captcha_channel"]
+                        channel = guild.get_channel(channel_id)
+                        if channel:
+                            await self._delete_channel_messages(guild, channel, data)
+                    
+                    if mode == "PRIVATE_CHANNEL":
+                        channel_id = data.get("channel_id")
+                        if channel_id:
+                            p_channel = guild.get_channel(channel_id)
+                            if p_channel:
+                                try:
+                                    await p_channel.delete(reason="CaptchaGate verification complete/failed.")
+                                except Exception:
+                                    pass
                     self.active_captchas.pop((guild_id, user_id), None)
             else:
                 self.active_captchas.pop((guild_id, user_id), None)
