@@ -35,3 +35,7 @@
 **Vulnerability:** The NameUpdate cog used instance variables to store guild-specific state, leading to cross-guild state contamination (IDOR).
 **Learning:** Instance variables in a Cog are shared across all guilds the bot is in.
 **Prevention:** Always use `Config.guild(guild)` to store state that is specific to a guild.
+## 2026-07-25 - Missing guild_only decorators on guild-dependent commands
+**Vulnerability:** Several commands in the Leveler cog (`profile`, `bio`, `top`, `levelshop`, `resetrank`, `levelset`) accessed `ctx.guild` without the `@commands.guild_only()` decorator. If executed in a Direct Message (DM), `ctx.guild` is `None`, leading to an `AttributeError` and unhandled exceptions.
+**Learning:** Commands that rely on guild-specific state or configuration must explicitly restrict execution to guilds to prevent application crashes and potential stack trace leakage when invoked from DMs.
+**Prevention:** Always add the `@commands.guild_only()` decorator to commands that require a server context (`ctx.guild`).

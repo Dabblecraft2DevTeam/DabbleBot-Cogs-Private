@@ -10,6 +10,7 @@ URL_REGEX = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%
 class CommandsMixin:
     """Mixin for Leveler commands."""
 
+    @commands.guild_only()
     @commands.hybrid_command(name="profile", description="Shows your or another user's leveling profile.")
     async def profile(self, ctx: commands.Context, user: discord.Member = None):
         if not await self.config.guild(ctx.guild).is_enabled():
@@ -64,6 +65,7 @@ class CommandsMixin:
         file = discord.File(img_bytes, filename="profile.png")
         await ctx.send(file=file)
 
+    @commands.guild_only()
     @commands.hybrid_command(name="bio", description="Set your profile bio.")
     @app_commands.describe(text="The bio text (max 100 characters).")
     async def bio(self, ctx: commands.Context, *, text: str):
@@ -78,6 +80,7 @@ class CommandsMixin:
         await self.db.update_user_cosmetics(ctx.guild.id, ctx.author.id, bio=clean_text)
         await ctx.send("Your bio has been updated.")
 
+    @commands.guild_only()
     @commands.hybrid_command(name="top", description="Shows the top users in the server.")
     async def top(self, ctx: commands.Context):
         if not await self.config.guild(ctx.guild).is_enabled():
@@ -118,6 +121,7 @@ class CommandsMixin:
             view = LeaderboardPaginationView(embeds)
             await ctx.send(embed=embeds[0], view=view)
 
+    @commands.guild_only()
     @commands.hybrid_command(name="levelshop", description="Buy cosmetics for your profile card.")
     async def levelshop(self, ctx: commands.Context):
         """Open the interactive shop and inventory menu."""
@@ -127,6 +131,7 @@ class CommandsMixin:
         view = MainShopView(self, ctx.author, self.db, self.config)
         await ctx.send(content="**🛒 Leveler Shop**\nChoose a category below:", view=view)
 
+    @commands.guild_only()
     @commands.hybrid_command(name="resetrank", description="Reset your rank and start over (costs credits if enabled).")
     async def resetrank(self, ctx: commands.Context):
         settings = await self.config.guild(ctx.guild).all()
@@ -165,6 +170,7 @@ class CommandsMixin:
             msg += f" (Cost: {price} credits)"
         await ctx.send(msg)
 
+    @commands.guild_only()
     @commands.group(name="levelset")
     @commands.admin_or_permissions(manage_guild=True)
     async def levelset(self, ctx: commands.Context):
