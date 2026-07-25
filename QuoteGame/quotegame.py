@@ -196,6 +196,33 @@ class QuoteGame(commands.Cog):
         await ctx.send("Forced a new game to start.")
 
     @quotegame.command()
+    async def nextphase(self, ctx):
+        """Force the current game to proceed to the next phase."""
+        current_game = await self.config.guild(ctx.guild).current_game()
+        if not current_game:
+            return await ctx.send("There is no active game.")
+            
+        phase = current_game.get("phase")
+        if phase == "finished":
+            return await ctx.send("The game has already finished. Use `[p]qg force` to start a new one.")
+            
+        channel_id = await self.config.guild(ctx.guild).channel_id()
+        channel = ctx.guild.get_channel(channel_id) if channel_id else None
+        
+        if not channel:
+            return await ctx.send("The configured game channel could not be found.")
+
+        if phase == "answering":
+            await ctx.send("Forcing game into the voting phase...")
+            await self.start_voting(ctx.guild, channel, current_game)
+        elif phase == "voting":
+            await ctx.send("Forcing game to conclude voting...")
+            await self.end_game(ctx.guild, channel, current_game)
+        else:
+            await ctx.send("The game is currently in an unknown state.")
+
+
+    @quotegame.command()
     async def setmin(self, ctx, amount: int):
         """Set the minimum number of submissions required to proceed to voting."""
         if amount < 1:
