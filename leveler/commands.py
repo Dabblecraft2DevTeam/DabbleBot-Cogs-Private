@@ -524,6 +524,13 @@ class CommandsMixin:
     @levelerdb.command(name="setup")
     async def levelerdb_setup(self, ctx: commands.Context, host: str, user: str, password: str, db: str, port: int = 3306):
         """Sets the MySQL database credentials. Requires a cog reload to take effect."""
+        if ctx.guild:
+            try:
+                await ctx.message.delete()
+            except discord.HTTPException:
+                pass
+            return await ctx.send("❌ For security reasons, please run this command in Direct Messages to prevent leaking your database password.")
+
         await self.config.mysql_host.set(host)
         await self.config.mysql_user.set(user)
         await self.config.mysql_password.set(password)
