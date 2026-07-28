@@ -1,8 +1,0 @@
-{
-    "author": ["Fluffy"],
-    "name": "OneTrueSlash",
-    "short": "One true slash command",
-    "description": "Registers a single slash command that can run any of the bot's text commands via autocomplete. Modified for DabbleBot with shorter command name, argument autocomplete, and command descriptions.",
-    "tags": ["slash", "commands", "utility"],
-    "end_user_data_statement": "This cog does not persistently store any end user data."
-}

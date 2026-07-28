@@ -1,0 +1,8 @@
+{
+    "author": ["Fluffy", "Dabblecraft2DevTeam"],
+    "name": "DabbleSlash",
+    "short": "DabbleBot slash command bridge",
+    "description": "Registers a single /db slash command that can run any of the bot's text commands via autocomplete. Forked from OneTrueSlash with shorter command name, argument autocomplete, command descriptions, and DM permission fixes.",
+    "tags": ["slash", "commands", "utility"],
+    "end_user_data_statement": "This cog does not persistently store any end user data."
+}

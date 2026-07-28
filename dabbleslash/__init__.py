@@ -12,7 +12,7 @@ from .commands import onetrueslash
 from .events import before_hook, on_user_update
 from .utils import valid_app_name
 
-LOG = logging.getLogger("red.fluffy.onetrueslash")
+LOG = logging.getLogger("red.dabbleslash")
 
 
 async def setup(bot: Red) -> None:
