@@ -1,0 +1,8 @@
+{
+    "author": ["Flare"],
+    "name": "CommandStats",
+    "short": "Command usage statistics",
+    "description": "Tracks command usage statistics including global, guild, session, and automated command stats. Modernized with button-based pagination and slash command support.",
+    "tags": ["stats", "commands", "utility"],
+    "end_user_data_statement": "This cog does not persistently store any end user data. Command usage counts are stored by command name only, not by user."
+}
