@@ -160,4 +160,12 @@ class InterContext(commands.Context):
     def bot_permissions(self):
         return self._apply_implicit_permissions(
             self.me, self._interaction.app_permissions
-        ) | discord.Permissions(send_messages=True, attach_files=True, embed_links=True)
+        ) | discord.Permissions(
+            send_messages=True,
+            attach_files=True,
+            embed_links=True,
+            add_reactions=True,
+            read_message_history=True,
+            external_emojis=True,
+            use_external_emojis=True,
+        )
