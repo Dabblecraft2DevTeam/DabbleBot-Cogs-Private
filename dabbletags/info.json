@@ -1,0 +1,9 @@
+{
+    "author": ["Dabblecraft2DevTeam"],
+    "name": "DabbleTags",
+    "short": "Custom slash command tags with TagScript",
+    "description": "Create custom slash commands with TagScriptEngine. Server admins can create tags that register as native slash commands.",
+    "tags": ["slash", "tags", "custom", "tagscript"],
+    "requirements": ["TagScriptEngine==2.6.5"],
+    "end_user_data_statement": "Stores tag author user IDs and tag usage counts. Users can request data deletion."
+}
