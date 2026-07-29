@@ -47,13 +47,17 @@ async def onetrueslash(
         # ctx.interaction = interaction
         await interaction.response.defer(ephemeral=True)
         actual = None
+        cog = None
         if arguments:
             actual = interaction.client.get_command(arguments)
             if actual and (signature := actual.signature):
                 actual = copy(actual)
                 actual.usage = f"arguments:{signature}"
+            if actual is None:
+                # Check if the argument is a cog name
+                cog = interaction.client.get_cog(arguments)
         await interaction.client.send_help_for(
-            ctx, actual or interaction.client, from_help_command=True
+            ctx, actual or cog or interaction.client, from_help_command=True
         )
     else:
         ferror: asyncio.Task[Tuple[InterContext, commands.CommandError]] = asyncio.create_task(
