@@ -3,7 +3,7 @@ import asyncio
 import re
 from redbot.core import commands, app_commands, bank
 from .image_gen import generate_profile_card
-from .ui import LeaderboardPaginationView, MainShopView
+from .ui import LeaderboardPaginationView, MainShopView, OwnerCleanupView
 
 URL_REGEX = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
@@ -13,6 +13,8 @@ class CommandsMixin:
     async def cog_check(self, ctx: commands.Context):
         if ctx.guild is None:
             if ctx.command and ctx.command.qualified_name.startswith("levelerdb"):
+                return True
+            if ctx.command and ctx.command.qualified_name == "levelset cleanup" and await ctx.bot.is_owner(ctx.author):
                 return True
             await ctx.send("this command cannot be used in DMs")
             return False
@@ -454,6 +456,34 @@ class CommandsMixin:
                 await ctx.send("Legacy items kept for users who already owned them.")
         except asyncio.TimeoutError:
             await ctx.send("Prompt timed out. Item removed from shop but kept for legacy users by default.")
+
+    @levelset.command(name="cleanuptime")
+    async def levelset_cleanuptime(self, ctx: commands.Context, hours: int):
+        """Set the time (in hours) a user can be gone before their data is wiped."""
+        if hours < 0:
+            return await ctx.send("Hours cannot be negative.")
+        await self.config.guild(ctx.guild).cleanup_delay.set(hours)
+        await ctx.send(f"Inactive user data will now be wiped after {hours} hours of being off the server (0 to disable).")
+
+    @levelset.command(name="cleanup")
+    async def levelset_cleanup(self, ctx: commands.Context):
+        """Manually wipe data for users who are no longer in the server."""
+        if ctx.guild is None:
+            # Reached only if bot owner executes in DM due to cog_check allowance
+            view = OwnerCleanupView(self)
+            await ctx.send("You are about to initiate a global cleanup of ALL servers. Click the button below to confirm.", view=view)
+            return
+
+        current_members = {m.id for m in ctx.guild.members}
+        members_data = await self.config.all_members(ctx.guild)
+        count = 0
+        for user_id in members_data.keys():
+            if user_id not in current_members:
+                await self.db.delete_user_guild(ctx.guild.id, user_id)
+                await self.config.member_from_ids(ctx.guild.id, user_id).clear()
+                count += 1
+                
+        await ctx.send(f"Cleanup complete. Removed {count} users who are no longer in this server.")
 
     @levelset.group(name="prestige")
     async def levelset_prestige(self, ctx: commands.Context):

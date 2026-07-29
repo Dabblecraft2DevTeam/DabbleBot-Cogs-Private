@@ -230,3 +230,44 @@ class LeaderboardPaginationView(discord.ui.View):
             await interaction.response.edit_message(embed=self.embeds[self.current_page], view=self)
         else:
             await interaction.response.defer()
+
+class CleanupConfirmModal(discord.ui.Modal, title="Global Cleanup Confirmation"):
+    confirm = discord.ui.TextInput(
+        label="Type 'confirm' to proceed",
+        placeholder="confirm",
+        required=True
+    )
+
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.confirm.value.lower() != "confirm":
+            return await interaction.response.send_message("Cleanup aborted.", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        count = 0
+        for guild in self.cog.bot.guilds:
+            if not await self.cog.config.guild(guild).is_enabled():
+                continue
+                
+            current_members = {m.id for m in guild.members}
+            members_data = await self.cog.config.all_members(guild)
+            for user_id in members_data.keys():
+                if user_id not in current_members:
+                    await self.cog.db.delete_user_guild(guild.id, user_id)
+                    await self.cog.config.member_from_ids(guild.id, user_id).clear()
+                    count += 1
+                    
+        await interaction.followup.send(f"Global cleanup complete. Removed {count} users who were no longer in their respective servers.", ephemeral=True)
+
+class OwnerCleanupView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=60)
+        self.cog = cog
+
+    @discord.ui.button(label="Clean All Servers", style=discord.ButtonStyle.danger)
+    async def clean_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = CleanupConfirmModal(self.cog)
+        await interaction.response.send_modal(modal)

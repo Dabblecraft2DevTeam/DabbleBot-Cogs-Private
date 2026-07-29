@@ -1,5 +1,6 @@
 import discord
 from redbot.core import commands, Config, bank
+from discord.ext import tasks
 from .database import SQLiteDB, MySQLDB
 from .api import LevelerAPI
 from .commands import CommandsMixin
@@ -38,7 +39,8 @@ class Leveler(CommandsMixin, commands.Cog):
             "shop_backgrounds": [
                 {"label": "Default", "value": "default", "price": 0}
             ],
-            "prestige_milestones": {}
+            "prestige_milestones": {},
+            "cleanup_delay": 24
         }
         
         # Global settings for database choice
@@ -53,7 +55,7 @@ class Leveler(CommandsMixin, commands.Cog):
         
         self.config.register_guild(**default_guild)
         self.config.register_global(**default_global)
-        self.config.register_member(legacy_badges=[], inventory_colors=[], inventory_backgrounds=[])
+        self.config.register_member(legacy_badges=[], inventory_colors=[], inventory_backgrounds=[], left_at=0)
         
         self.db = None
         self.api = None
@@ -62,29 +64,29 @@ class Leveler(CommandsMixin, commands.Cog):
         self._cooldowns = {}
         
     async def cog_load(self):
-        """Called when the cog is loaded."""
         use_mysql = await self.config.use_mysql()
+        
         if use_mysql:
-            db_config = {
-                "host": await self.config.mysql_host(),
-                "user": await self.config.mysql_user(),
-                "password": await self.config.mysql_password(),
-                "db": await self.config.mysql_db(),
-                "port": await self.config.mysql_port(),
-            }
-            self.db = MySQLDB(**db_config)
+            host = await self.config.mysql_host()
+            user = await self.config.mysql_user()
+            password = await self.config.mysql_password()
+            db_name = await self.config.mysql_db()
+            port = await self.config.mysql_port()
+            
+            self.db = MySQLDB(host=host, user=user, password=password, db=db_name, port=port)
         else:
-            from redbot.core import data_manager
-            db_path = os.path.join(data_manager.cog_data_path(self), "leveler.db")
+            db_path = os.path.join(self.bot.config_dir, "leveler_db.sqlite")
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             self.db = SQLiteDB(db_path)
             
         await self.db.connect()
         self.api = LevelerAPI(self.db)
-        
+        self.cleanup_task.start()
+
     async def cog_unload(self):
-        """Called when the cog is unloaded."""
         if self.db:
             await self.db.close()
+        self.cleanup_task.cancel()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -134,14 +136,49 @@ class Leveler(CommandsMixin, commands.Cog):
         if new_level > old_level:
             await self.handle_level_up(guild, user, new_level, old_level)
 
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        if await self.config.guild(member.guild).is_enabled():
+            await self.config.member(member).left_at.set(int(time.time()))
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        if await self.config.guild(member.guild).is_enabled():
+            await self.config.member(member).left_at.set(0)
+
+    @tasks.loop(hours=1)
+    async def cleanup_task(self):
+        for guild in self.bot.guilds:
+            if not await self.config.guild(guild).is_enabled():
+                continue
+                
+            delay_hours = await self.config.guild(guild).cleanup_delay()
+            if delay_hours <= 0:
+                continue
+                
+            delay_seconds = delay_hours * 3600
+            current_time = int(time.time())
+            
+            members_data = await self.config.all_members(guild)
+            for user_id, data in members_data.items():
+                left_at = data.get("left_at", 0)
+                if left_at > 0 and (current_time - left_at) > delay_seconds:
+                    # User left and didn't return within delay, wipe them!
+                    await self.db.delete_user_guild(guild.id, user_id)
+                    await self.config.member_from_ids(guild.id, user_id).clear()
+
+    @cleanup_task.before_loop
+    async def before_cleanup_task(self):
+        await self.bot.wait_until_red_ready()
+
     async def handle_level_up(self, guild: discord.Guild, user: discord.Member, new_level: int, old_level: int = 0):
         # 1. Economy reward
         reward = await self.config.guild(guild).level_up_reward()
         if reward > 0:
             try:
                 await bank.deposit_credits(user, reward)
-            except Exception:
-                pass # Economy might be disabled or max balance reached
+            except Exception as e:
+                print(f"Error handling message: {e}")
                 
         # 2. Send image notification
         channel_id = await self.config.guild(guild).level_up_channel()

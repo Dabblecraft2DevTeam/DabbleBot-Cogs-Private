@@ -35,8 +35,13 @@ class BaseDB(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def delete_user(self, user_id: int):
+    def delete_user(self, user_id: int):
         """Delete all data for a user across all guilds."""
+        pass
+
+    @abc.abstractmethod
+    async def delete_user_guild(self, guild_id: int, user_id: int):
+        """Delete a user from a specific guild."""
         pass
 
 class SQLiteDB(BaseDB):
@@ -193,6 +198,15 @@ class SQLiteDB(BaseDB):
         await self.conn.commit()
         log.info(f"Deleted all leveler data for user_id {user_id} from SQLite.")
 
+    async def delete_user_guild(self, guild_id: int, user_id: int):
+        """Delete a user from a specific guild."""
+        await self.conn.execute(
+            "DELETE FROM users WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id)
+        )
+        await self.conn.commit()
+        log.info(f"Deleted leveler data for user_id {user_id} in guild {guild_id} from SQLite.")
+
 
 class MySQLDB(BaseDB):
     def __init__(self, **db_config):
@@ -342,6 +356,8 @@ class MySQLDB(BaseDB):
 
     async def delete_user(self, user_id: int):
         """Delete all data for a user across all guilds."""
+        if not self.pool:
+            return
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -350,3 +366,14 @@ class MySQLDB(BaseDB):
                 )
         log.info(f"Deleted all leveler data for user_id {user_id} from MySQL.")
 
+    async def delete_user_guild(self, guild_id: int, user_id: int):
+        """Delete a user from a specific guild."""
+        if not self.pool:
+            return
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "DELETE FROM users WHERE guild_id = %s AND user_id = %s",
+                    (guild_id, user_id)
+                )
+        log.info(f"Deleted leveler data for user_id {user_id} in guild {guild_id} from MySQL.")
