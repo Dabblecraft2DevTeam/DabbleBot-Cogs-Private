@@ -14,7 +14,7 @@ class CommandsMixin:
         if ctx.guild is None:
             if ctx.command and ctx.command.qualified_name.startswith("levelerdb"):
                 return True
-            if ctx.command and ctx.command.qualified_name == "levelset cleanup" and await ctx.bot.is_owner(ctx.author):
+            if ctx.command and ctx.command.qualified_name.startswith("levelset") and "cleanup" in ctx.message.content.lower():
                 return True
             await ctx.send("this command cannot be used in DMs")
             return False
@@ -469,7 +469,9 @@ class CommandsMixin:
     async def levelset_cleanup(self, ctx: commands.Context):
         """Manually wipe data for users who are no longer in the server."""
         if ctx.guild is None:
-            # Reached only if bot owner executes in DM due to cog_check allowance
+            if not await ctx.bot.is_owner(ctx.author):
+                return await ctx.send("Only the bot owner can run this command in DMs.")
+                
             view = OwnerCleanupView(self)
             await ctx.send("You are about to initiate a global cleanup of ALL servers. Click the button below to confirm.", view=view)
             return
