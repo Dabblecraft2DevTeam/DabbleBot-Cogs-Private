@@ -137,7 +137,11 @@ class ErrorLogs(commands.Cog):
             description=f"[Jump to message]({msg_url})",
         )
         embed.add_field(name="Invoker", value=f"{ctx.author.mention}\n{ctx.author}\n")
-        embed.add_field(name="Content", value=ctx.message.content)
+        msg_content = ctx.message.content
+        if getattr(ctx, "interaction", None):
+            msg_content = f"/{ctx.command.qualified_name}"
+
+        embed.add_field(name="Content", value=msg_content)
         _channel_disp = (
             "{}\n({})".format(ctx.channel.mention, ctx.channel.name)
             if ctx.guild is not None
@@ -145,7 +149,7 @@ class ErrorLogs(commands.Cog):
         )
         embed.add_field(name="Channel", value=_channel_disp)
 
-        nonembed_context = f"Invoker: {ctx.author}\nContent: {ctx.message.content}\n"
+        nonembed_context = f"Invoker: {ctx.author}\nContent: {msg_content}\n"
 
         if ctx.guild is not None:
             embed.add_field(name="Server", value=ctx.guild.name)
