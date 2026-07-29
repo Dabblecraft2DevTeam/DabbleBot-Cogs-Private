@@ -139,7 +139,7 @@ class CommandStats(commands.Cog):
             for cmd, amount in data.items()
         ]
 
-        return list(chunks(stats, 15))
+        return stats
 
     @commands.is_owner()
     @commands.group(invoke_without_command=True)

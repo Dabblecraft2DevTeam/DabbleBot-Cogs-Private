@@ -117,7 +117,7 @@ class EmbedFormat(StatsSource):
 
     def __init__(self, entries: Iterable, title: str = None, stat_type: str = None,
                  ctx=None, timestamp: Optional[datetime.datetime] = None):
-        super().__init__(entries, per_page=1)
+        super().__init__(entries, per_page=15)
         self.title = title
         self.stat_type = stat_type
         self.ctx = ctx
