@@ -1,0 +1,8 @@
+{
+    "author": ["Dabblecraft2DevTeam"],
+    "name": "RndStatus",
+    "short": "Random bot status cycling",
+    "description": "Cycles through random bot statuses (playing, watching, listening) at a configurable interval.",
+    "tags": ["status", "utility"],
+    "end_user_data_statement": "This cog does not persistently store any end user data."
+}

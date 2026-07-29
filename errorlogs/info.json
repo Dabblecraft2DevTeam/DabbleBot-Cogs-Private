@@ -1,0 +1,8 @@
+{
+    "author": ["Dabblecraft2DevTeam"],
+    "name": "ErrorLogs",
+    "short": "Error logging to Discord channels",
+    "description": "Logs command errors and tracebacks to a designated Discord channel for debugging.",
+    "tags": ["logging", "errors", "utility"],
+    "end_user_data_statement": "This cog does not persistently store any end user data. Error tracebacks may contain command arguments."
+}
