@@ -75,7 +75,8 @@ class Leveler(CommandsMixin, commands.Cog):
             
             self.db = MySQLDB(host=host, user=user, password=password, db=db_name, port=port)
         else:
-            db_path = os.path.join(self.bot.config_dir, "leveler_db.sqlite")
+            from redbot.core import data_manager
+            db_path = os.path.join(data_manager.cog_data_path(self), "leveler_db.sqlite")
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
             self.db = SQLiteDB(db_path)
             
