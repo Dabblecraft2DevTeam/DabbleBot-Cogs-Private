@@ -10,6 +10,14 @@ URL_REGEX = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%
 class CommandsMixin:
     """Mixin for Leveler commands."""
 
+    async def cog_check(self, ctx: commands.Context):
+        if ctx.guild is None:
+            if ctx.command and ctx.command.qualified_name.startswith("levelerdb"):
+                return True
+            await ctx.send("this command cannot be used in DMs")
+            return False
+        return True
+
     @commands.hybrid_command(name="profile", description="Shows your or another user's leveling profile.")
     async def profile(self, ctx: commands.Context, user: discord.Member = None):
         if not await self.config.guild(ctx.guild).is_enabled():
