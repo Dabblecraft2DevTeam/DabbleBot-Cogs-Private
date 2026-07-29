@@ -176,11 +176,9 @@ class RndStatus(commands.Cog):
             status = discord.Status.offline
 
         if botstats:
-            me = self.bot.user
-            clean_prefix = pattern.sub(f"@{me.name}", prefix[0])
             total_users = len(self.bot.users)
             servers = str(len(self.bot.guilds))
-            botstatus = f"{clean_prefix}help | {total_users} users | {servers} servers"
+            botstatus = f"/db help | {total_users} users | {servers} servers"
             if (current_game != str(botstatus)) or current_game is None:
                 if _type == 1:
                     await self.bot.change_presence(activity=discord.Streaming(name=botstatus, url=url))
