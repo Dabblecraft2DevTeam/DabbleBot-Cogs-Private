@@ -1,0 +1,10 @@
+{
+    "author": ["Antigravity"],
+    "name": "PrefixBlocker",
+    "install_msg": "Thank you for installing PrefixBlocker.",
+    "short": "Blocks prefix commands and directs users to slash commands.",
+    "description": "Intercepts prefix commands and tells users to use slash commands or bot mentions instead.",
+    "tags": ["prefix", "slash", "utility"],
+    "requirements": [],
+    "end_user_data_statement": "This cog does not persistently store data or metadata about users."
+}
