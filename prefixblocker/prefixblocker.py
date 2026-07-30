@@ -44,7 +44,11 @@ class PrefixBlocker(commands.Cog):
             return
         
         # Skip if this was invoked via slash command or mention
-        # Check if the invocation was via an interaction (slash command)
+        # DabbleSlash sets _interaction on the context before invocation
+        if getattr(ctx, "_interaction", None) is not None:
+            return
+        
+        # Check if the interaction was set by DabbleSlash's before_hook
         if getattr(ctx, "interaction", None) is not None:
             return
         
@@ -52,6 +56,11 @@ class PrefixBlocker(commands.Cog):
         content = ctx.message.content
         bot_id = self.bot.user.id
         if content.startswith(f"<@{bot_id}>") or content.startswith(f"<@!{bot_id}>"):
+            return
+        
+        # Check if the prefix is a mention (DabbleSlash uses mention-like prefixes)
+        prefix = ctx.prefix or ""
+        if prefix.startswith("<@"):
             return
         
         # This is a prefix command — block it
