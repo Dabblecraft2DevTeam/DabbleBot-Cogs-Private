@@ -477,9 +477,12 @@ class CommandsMixin:
             return
 
         current_members = {m.id for m in ctx.guild.members}
+        db_users = await self.db.get_all_users_in_guild(ctx.guild.id)
         members_data = await self.config.all_members(ctx.guild)
+        all_tracked_users = set(db_users).union(members_data.keys())
+        
         count = 0
-        for user_id in members_data.keys():
+        for user_id in all_tracked_users:
             if user_id not in current_members:
                 await self.db.delete_user_guild(ctx.guild.id, user_id)
                 await self.config.member_from_ids(ctx.guild.id, user_id).clear()

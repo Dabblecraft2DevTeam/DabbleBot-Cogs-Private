@@ -31,6 +31,11 @@ class BaseDB(abc.ABC):
         pass
     
     @abc.abstractmethod
+    async def get_all_users_in_guild(self, guild_id: int) -> list[int]:
+        """Return a list of all user_ids stored in the database for a given guild."""
+        pass
+        
+    @abc.abstractmethod
     async def update_user_cosmetics(self, guild_id: int, user_id: int, **kwargs):
         pass
 
@@ -165,6 +170,11 @@ class SQLiteDB(BaseDB):
             (limit, offset)
         ) as cursor:
             return await cursor.fetchall()
+
+    async def get_all_users_in_guild(self, guild_id: int) -> list[int]:
+        async with self.conn.execute("SELECT user_id FROM users WHERE guild_id = ?", (guild_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
 
     async def update_user_cosmetics(self, guild_id: int, user_id: int, **kwargs):
         if not kwargs:
@@ -329,6 +339,15 @@ class MySQLDB(BaseDB):
                     (limit, offset)
                 )
                 return await cur.fetchall()
+
+    async def get_all_users_in_guild(self, guild_id: int) -> list[int]:
+        if not self.pool:
+            return []
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT user_id FROM users WHERE guild_id = %s", (guild_id,))
+                rows = await cur.fetchall()
+                return [row[0] for row in rows]
 
     async def update_user_cosmetics(self, guild_id: int, user_id: int, **kwargs):
         if not kwargs:

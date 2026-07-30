@@ -253,8 +253,11 @@ class CleanupConfirmModal(discord.ui.Modal, title="Global Cleanup Confirmation")
                 continue
                 
             current_members = {m.id for m in guild.members}
+            db_users = await self.cog.db.get_all_users_in_guild(guild.id)
             members_data = await self.cog.config.all_members(guild)
-            for user_id in members_data.keys():
+            all_tracked_users = set(db_users).union(members_data.keys())
+            
+            for user_id in all_tracked_users:
                 if user_id not in current_members:
                     await self.cog.db.delete_user_guild(guild.id, user_id)
                     await self.cog.config.member_from_ids(guild.id, user_id).clear()
