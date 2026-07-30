@@ -146,68 +146,6 @@ async def onetrueslash_command_autocomplete(
     return choices
 
 
-@onetrueslash.autocomplete("arguments")
-async def onetrueslash_arguments_autocomplete(
-    interaction: discord.Interaction, current: str
-) -> List[app_commands.Choice[str]]:
-    """Provide argument hints based on the selected command's signature."""
-    assert isinstance(interaction.client, Red)
-
-    if not await interaction.client.allowed_by_whitelist_blacklist(interaction.user):
-        return []
-
-    # Get the command the user selected in the command field
-    command_name = None
-    for option in interaction.data.get("options", []):
-        if option["name"] == "command":
-            command_name = option.get("value")
-            break
-
-    if not command_name:
-        return []
-
-    command = interaction.client.get_command(command_name)
-    if not command:
-        return []
-
-    # Build hint choices from the command's signature/parameters
-    signature = command.signature
-    if not signature:
-        return []
-
-    # Parse the signature into individual argument hints
-    # Signature looks like: "<user: Member> <reason: str>"
-    hints = []
-    params = command.clean_params
-    for param_name, param in params.items():
-        if param_name in ("ctx", "context"):
-            continue
-        # Build a hint string for this parameter
-        param_type = param.annotation
-        type_name = getattr(param_type, "__name__", str(param_type))
-        required = param.default == param.empty
-        if required:
-            hint = f"📋 {param_name} ({type_name}) — required"
-        else:
-            hint = f"📋 {param_name} ({type_name}) — optional"
-        # Use empty string as value so clicking the hint doesn't insert broken text
-        hints.append(app_commands.Choice(name=hint[:100], value=""))
-
-    # Also offer a combined hint showing the full signature (informational only)
-    if signature and len(signature) <= 90:
-        hints.insert(0, app_commands.Choice(
-            name=f"ℹ️ Signature: {signature}",
-            value="",
-        ))
-
-    # Filter by current input if the user has started typing
-    if current:
-        hints = [h for h in hints if current.lower() in h.name.lower()][:6]
-    else:
-        hints = hints[:6]
-
-    return hints
-
 
 @onetrueslash.error
 async def onetrueslash_error(interaction: discord.Interaction, error: Exception):
