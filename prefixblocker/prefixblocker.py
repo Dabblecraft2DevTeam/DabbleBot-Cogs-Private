@@ -12,7 +12,10 @@ class PrefixBlocker(commands.Cog):
             "enabled": True
         }
         self.config.register_guild(**default_guild)
-
+        
+        # Register the before_invoke hook
+        self._before_invoke = bot.before_invoke(self._block_prefix)
+    
     async def red_delete_data_for_user(self, *, requester: str, user_id: int):
         """This cog does not store any user data."""
         return
@@ -20,6 +23,53 @@ class PrefixBlocker(commands.Cog):
     async def red_get_data_for_user(self, *, user_id: int):
         """This cog does not store any user data."""
         return {}
+    
+    def cog_unload(self):
+        # Remove the before_invoke hook when cog is unloaded
+        self.bot.remove_before_invoke_hook(self._before_invoke)
+    
+    async def _block_prefix(self, ctx: commands.Context):
+        """Intercept prefix commands before they execute."""
+        # Skip if not in a guild
+        if not ctx.guild:
+            return
+        
+        # Skip if author is a bot owner
+        if await self.bot.is_owner(ctx.author):
+            return
+        
+        # Skip if blocker is disabled for this guild
+        enabled = await self.config.guild(ctx.guild).enabled()
+        if not enabled:
+            return
+        
+        # Skip if this was invoked via slash command or mention
+        # Check if the invocation was via an interaction (slash command)
+        if getattr(ctx, "interaction", None) is not None:
+            return
+        
+        # Check if the message content starts with a mention prefix
+        content = ctx.message.content
+        bot_id = self.bot.user.id
+        if content.startswith(f"<@{bot_id}>") or content.startswith(f"<@!{bot_id}>"):
+            return
+        
+        # This is a prefix command — block it
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            pass
+        
+        try:
+            await ctx.channel.send(
+                f"{ctx.author.mention}, please use slash commands (like `/db`) or mention the bot (`@DabbleBot`) instead of using prefix commands.",
+                delete_after=10
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+        
+        # Cancel the command execution by raising CheckFailure
+        raise commands.CheckFailure("Prefix commands are disabled in this server.")
 
     @commands.group(name="prefixblock")
     @commands.is_owner()
@@ -40,56 +90,3 @@ class PrefixBlocker(commands.Cog):
         
         status = "enabled" if new_state else "disabled"
         await ctx.send(f"Prefix blocker has been **{status}** in this server.")
-
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-            
-        if not message.guild:
-            return
-
-        # Skip if author is a bot owner
-        if await self.bot.is_owner(message.author):
-            return
-
-        enabled = await self.config.guild(message.guild).enabled()
-        if not enabled:
-            return
-
-        # Get valid prefixes for this guild
-        prefixes = await self.bot.get_valid_prefixes(message.guild)
-        
-        # We don't want to block mention prefixes.
-        mention1 = f"<@{self.bot.user.id}> "
-        mention2 = f"<@!{self.bot.user.id}> "
-        
-        is_prefix = False
-        for prefix in prefixes:
-            if prefix in (mention1, mention2):
-                continue
-            if message.content.startswith(prefix):
-                is_prefix = True
-                break
-                
-        if is_prefix:
-            # Delete the original prefix command message
-            try:
-                await message.delete()
-            except discord.Forbidden:
-                pass
-            except discord.NotFound:
-                pass
-            except discord.HTTPException:
-                pass
-            
-            # Send brief message telling the user to use /db or @DabbleBot instead
-            try:
-                await message.channel.send(
-                    f"{message.author.mention}, please use slash commands (like `/db`) or mention the bot (`@DabbleBot`) instead of using prefix commands.",
-                    delete_after=10
-                )
-            except discord.Forbidden:
-                pass
-            except discord.HTTPException:
-                pass
