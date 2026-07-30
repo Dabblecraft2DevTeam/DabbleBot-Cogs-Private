@@ -187,16 +187,17 @@ async def onetrueslash_arguments_autocomplete(
         type_name = getattr(param_type, "__name__", str(param_type))
         required = param.default == param.empty
         if required:
-            hint = f"{param_name} ({type_name}) — required"
+            hint = f"📋 {param_name} ({type_name}) — required"
         else:
-            hint = f"{param_name} ({type_name}) — optional"
-        hints.append(app_commands.Choice(name=hint[:100], value=param_name))
+            hint = f"📋 {param_name} ({type_name}) — optional"
+        # Use empty string as value so clicking the hint doesn't insert broken text
+        hints.append(app_commands.Choice(name=hint[:100], value=""))
 
-    # Also offer a combined hint showing the full signature
-    if signature and len(signature) <= 100:
+    # Also offer a combined hint showing the full signature (informational only)
+    if signature and len(signature) <= 90:
         hints.insert(0, app_commands.Choice(
-            name=f"Signature: {signature}",
-            value=signature,
+            name=f"ℹ️ Signature: {signature}",
+            value="",
         ))
 
     # Filter by current input if the user has started typing
