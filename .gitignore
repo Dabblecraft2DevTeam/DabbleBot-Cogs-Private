@@ -3,3 +3,5 @@
 /QuoteGame/__pycache__
 /leveler/__pycache__
 __pycache__/
+__pycache__/
+*.pyc
