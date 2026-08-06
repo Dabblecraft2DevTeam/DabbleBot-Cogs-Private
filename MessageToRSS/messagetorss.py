@@ -165,6 +165,11 @@ class MessageToRSS(commands.Cog):
                     combined_text += f"\n{embed.title}"
 
         for feed_name, feed_config in guild_data["feeds"].items():
+            # If feed has specific channels bound, only route messages from those channels
+            feed_channels = feed_config.get("channels", [])
+            if feed_channels and message.channel.id not in feed_channels:
+                continue
+
             feed_filters = feed_config.get("filters", [])
             global_filters = guild_data.get("global_filters", [])
 
@@ -347,7 +352,8 @@ class MessageToRSS(commands.Cog):
                 "title": title,
                 "description": description,
                 "filters": [],
-                "items": []
+                "items": [],
+                "channels": []
             }
         await ctx.send(f"Created feed '{name}'.")
 
@@ -370,7 +376,70 @@ class MessageToRSS(commands.Cog):
             return
         msg = "Configured feeds:\n"
         for name, config in feeds.items():
-            msg += f"- **{name}**: {config.get('title')} ({len(config.get('items', []))} items)\n"
+            bound = config.get("channels", [])
+            bound_str = f" [bound: {', '.join(f'<#{c}>' for c in bound)}]" if bound else " [all channels]"
+            msg += f"- **{name}**: {config.get('title')} ({len(config.get('items', []))} items){bound_str}\n"
+        await ctx.send(msg)
+
+    @messagetorss.command(name="bindchannel")
+    async def cmd_bindchannel(self, ctx: commands.Context, feed_name: str, channel: discord.TextChannel):
+        """Bind a specific channel to a feed.
+
+        Only messages from bound channels will be added to that feed.
+        If no channels are bound, the feed receives from all guild-level listened channels.
+
+        Usage: `[p]messagetorss bindchannel <feed_name> <channel>`
+        """
+        async with self.config.guild(ctx.guild).feeds() as feeds:
+            if feed_name not in feeds:
+                await ctx.send(f"Feed '{feed_name}' not found.")
+                return
+            feed_channels = feeds[feed_name].setdefault("channels", [])
+            if channel.id in feed_channels:
+                await ctx.send(f"{channel.mention} is already bound to feed '{feed_name}'.")
+                return
+            feed_channels.append(channel.id)
+        await ctx.send(f"Bound {channel.mention} to feed '{feed_name}'.")
+
+    @messagetorss.command(name="unbindchannel")
+    async def cmd_unbindchannel(self, ctx: commands.Context, feed_name: str, channel: discord.TextChannel):
+        """Remove a channel binding from a feed.
+
+        Usage: `[p]messagetorss unbindchannel <feed_name> <channel>`
+        """
+        async with self.config.guild(ctx.guild).feeds() as feeds:
+            if feed_name not in feeds:
+                await ctx.send(f"Feed '{feed_name}' not found.")
+                return
+            feed_channels = feeds[feed_name].get("channels", [])
+            if channel.id in feed_channels:
+                feed_channels.remove(channel.id)
+                await ctx.send(f"Unbound {channel.mention} from feed '{feed_name}'.")
+            else:
+                await ctx.send(f"{channel.mention} is not bound to feed '{feed_name}'.")
+
+    @messagetorss.command(name="listbindings")
+    async def cmd_listbindings(self, ctx: commands.Context, feed_name: str = None):
+        """List channel bindings for a feed or all feeds.
+
+        Usage: `[p]messagetorss listbindings [feed_name]`
+        """
+        feeds = await self.config.guild(ctx.guild).feeds()
+        if not feeds:
+            await ctx.send("No feeds configured.")
+            return
+        msg = ""
+        for name, config in feeds.items():
+            if feed_name and name != feed_name:
+                continue
+            bound = config.get("channels", [])
+            if bound:
+                mentions = ", ".join(f"<#{c}>" for c in bound)
+                msg += f"**{name}**: {mentions}\n"
+            else:
+                msg += f"**{name}**: (all guild channels)\n"
+        if not msg.strip():
+            msg = f"Feed '{feed_name}' not found." if feed_name else "No feeds configured."
         await ctx.send(msg)
 
     @messagetorss.command(name="addfilter")
