@@ -1,0 +1,15 @@
+{
+    "name": "MessageToRSS",
+    "short": "Convert Discord messages to RSS feeds",
+    "description": "Listens to Discord messages in configurable channels and pushes the content to configurable RSS feeds with filtering functionality.",
+    "end_user_data_statement": "This cog stores Discord message contents temporarily to generate RSS feeds. The stored data can be deleted upon user request.",
+    "install_msg": "Thanks for installing MessageToRSS! Make sure to set up the channels and feeds using `/messagetorss` commands.",
+    "author": ["AI"],
+    "required_cogs": {},
+    "requirements": ["feedgen==1.0.0"],
+    "tags": ["rss", "feed", "message", "relay", "filter"],
+    "min_bot_version": "3.5.0",
+    "hidden": false,
+    "disabled": false,
+    "type": "COG"
+}
