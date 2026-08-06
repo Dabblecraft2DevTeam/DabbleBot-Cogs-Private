@@ -176,6 +176,85 @@ class MessageToRSS(commands.Cog):
             if self._passes_filters(message, combined_text, feed_filters, global_filters):
                 await self.push_to_feed(message.guild, feed_name, message, combined_text, guild_data)
 
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        """Update feed items when a message is edited."""
+        if not after.guild or after.is_system():
+            return
+
+        guild_data = await self.config.guild(after.guild).all()
+        if not guild_data["enabled"]:
+            return
+
+        if after.channel.id not in guild_data["channels"]:
+            return
+
+        if after.author.bot and not guild_data["include_bot"]:
+            return
+
+        # Rebuild combined text from the edited message
+        combined_text = after.content
+        if guild_data["include_embeds"]:
+            for embed in after.embeds:
+                if embed.description:
+                    combined_text += f"\n{embed.description}"
+                if embed.title:
+                    combined_text += f"\n{embed.title}"
+
+        item_id = f"discord://{after.guild.id}/{after.channel.id}/{after.id}"
+        modified = False
+
+        async with self.config.guild(after.guild).feeds() as feeds:
+            for feed_name, feed_config in feeds.items():
+                # Check channel binding
+                feed_channels = feed_config.get("channels", [])
+                if feed_channels and after.channel.id not in feed_channels:
+                    continue
+
+                items = feed_config.get("items", [])
+                for item in items:
+                    if item["id"] == item_id:
+                        item["content"] = combined_text or "(No Text Content)"
+                        item["title"] = f"Message from {after.author} in #{after.channel.name}"
+                        modified = True
+                        break
+
+        if modified:
+            # Re-render all affected feeds
+            updated_guild_data = await self.config.guild(after.guild).all()
+            for feed_name, feed_data in updated_guild_data["feeds"].items():
+                feed_channels = feed_data.get("channels", [])
+                if feed_channels and after.channel.id not in feed_channels:
+                    continue
+                await self._render_and_store_feed(after.guild, feed_name, feed_data, feed_data.get("items", []), updated_guild_data)
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message):
+        """Remove feed items when a message is deleted."""
+        if not message.guild:
+            return
+
+        guild_data = await self.config.guild(message.guild).all()
+        if not guild_data["enabled"]:
+            return
+
+        item_id = f"discord://{message.guild.id}/{message.channel.id}/{message.id}"
+        modified_feeds = []
+
+        async with self.config.guild(message.guild).feeds() as feeds:
+            for feed_name, feed_config in feeds.items():
+                items = feed_config.get("items", [])
+                original_len = len(items)
+                feed_config["items"] = [item for item in items if item["id"] != item_id]
+                if len(feed_config["items"]) < original_len:
+                    modified_feeds.append(feed_name)
+
+        if modified_feeds:
+            updated_guild_data = await self.config.guild(message.guild).all()
+            for feed_name in modified_feeds:
+                feed_data = updated_guild_data["feeds"][feed_name]
+                await self._render_and_store_feed(message.guild, feed_name, feed_data, feed_data.get("items", []), updated_guild_data)
+
     def _passes_filters(self, message: discord.Message, combined_text: str, feed_filters: list, global_filters: list) -> bool:
         all_filters = global_filters + feed_filters
         whitelists = [f for f in all_filters if f["mode"] == "whitelist"]
