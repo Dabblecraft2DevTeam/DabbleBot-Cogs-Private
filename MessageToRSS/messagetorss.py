@@ -1,4 +1,5 @@
 import re
+import ssl
 import aiohttp
 from aiohttp import web
 import discord
@@ -39,7 +40,11 @@ class MessageToRSS(commands.Cog):
         self.config.register_global(
             http_port=8823,
             http_host="0.0.0.0",
-            actual_port=8823
+            actual_port=8823,
+            https_enabled=True,
+            https_port=443,
+            ssl_cert="/etc/letsencrypt/live/feeds.cfourinternational.org/fullchain.pem",
+            ssl_key="/etc/letsencrypt/live/feeds.cfourinternational.org/privkey.pem",
         )
 
         self._runner = None
@@ -115,8 +120,13 @@ class MessageToRSS(commands.Cog):
     async def _handle_health(self, request):
         return web.json_response({"status": "ok"})
 
+    async def _handle_root(self, request):
+        """Redirect / to /feeds (the feed index page)."""
+        raise web.HTTPFound("/feeds")
+
     async def _start_http_server(self):
         app = web.Application()
+        app.router.add_get('/', self._handle_root)
         app.router.add_get('/feeds', self._handle_index)
         app.router.add_get('/feeds/', self._handle_index)
         app.router.add_get('/feeds/{feed_name}', self._handle_feed)
@@ -127,7 +137,35 @@ class MessageToRSS(commands.Cog):
 
         host = await self.config.http_host()
         base_port = await self.config.http_port()
+        https_enabled = await self.config.https_enabled()
+        https_port = await self.config.https_port()
 
+        # Start HTTPS server on port 443 (or configured https_port)
+        if https_enabled:
+            cert_path = await self.config.ssl_cert()
+            key_path = await self.config.ssl_key()
+
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            try:
+                ssl_context.load_cert_chain(cert_path, key_path)
+            except Exception as e:
+                log.error(f"MessageToRSS: Failed to load SSL cert: {e}. Falling back to HTTP only.")
+                https_enabled = False
+
+            if https_enabled:
+                for p in range(https_port, https_port + 3):
+                    try:
+                        site = web.TCPSite(self._runner, host, p, ssl_context=ssl_context)
+                        await site.start()
+                        await self.config.actual_port.set(p)
+                        log.info(f"MessageToRSS HTTPS server started on {host}:{p}")
+                        return
+                    except OSError:
+                        log.warning(f"Port {p} in use, trying next...")
+
+                log.error("Failed to start MessageToRSS HTTPS server, ports in use. Falling back to HTTP.")
+
+        # Fallback: Start HTTP server on configured port
         for p in range(base_port, base_port + 3):
             try:
                 site = web.TCPSite(self._runner, host, p)
@@ -740,9 +778,15 @@ class MessageToRSS(commands.Cog):
 
         Usage: `[p]messagetorss feedurl <feed_name>`
         """
-        host = await self.config.http_host()
+        https_enabled = await self.config.https_enabled()
         port = await self.config.actual_port()
-        url = f"http://{host}:{port}/feeds/{feed_name}"
+        if https_enabled and port == 443:
+            url = f"https://feeds.cfourinternational.org/feeds/{feed_name}"
+        elif https_enabled:
+            url = f"https://feeds.cfourinternational.org:{port}/feeds/{feed_name}"
+        else:
+            host = await self.config.http_host()
+            url = f"http://{host}:{port}/feeds/{feed_name}"
         await ctx.send(f"Feed URL: {url}")
 
     @messagetorss.command(name="setport")
@@ -765,6 +809,7 @@ class MessageToRSS(commands.Cog):
         """Show HTTP server status."""
         host = await self.config.http_host()
         port = await self.config.actual_port()
+        https_enabled = await self.config.https_enabled()
         running = self._runner is not None
 
         feed_dir = cog_data_path(self) / "feeds"
@@ -772,7 +817,9 @@ class MessageToRSS(commands.Cog):
         if feed_dir.exists():
             feed_count = len([f for f in feed_dir.iterdir() if f.name.endswith(".xml")])
 
+        scheme = "HTTPS" if https_enabled else "HTTP"
         msg = f"**Status:** {'Running' if running else 'Stopped'}\n"
+        msg += f"**Protocol:** {scheme}\n"
         msg += f"**Host:** {host}\n"
         msg += f"**Port:** {port}\n"
         msg += f"**Feeds Served:** {feed_count}"
