@@ -187,6 +187,8 @@ class MessageToRSS(commands.Cog):
         if not message.guild or message.is_system():
             return
 
+        log.info(f"MessageToRSS: on_message fired for {message.id} in #{message.channel.name} (guild {message.guild.id})")
+
         guild_data = await self.config.guild(message.guild).all()
         if not guild_data["enabled"]:
             return
@@ -218,50 +220,69 @@ class MessageToRSS(commands.Cog):
                 await self.push_to_feed(message.guild, feed_name, message, combined_text, guild_data)
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
         """Update feed items when a message is edited.
 
+        Uses on_raw_message_edit to catch edits even for messages not in the
+        bot's internal cache (e.g., messages sent before the bot started).
         If the message predates the feed (no existing item found), it gets
         backfilled as a new item on edit.
         """
-        if not after.guild or after.is_system():
+        if not payload.guild_id:
             return
 
-        guild_data = await self.config.guild(after.guild).all()
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+
+        guild_data = await self.config.guild(guild).all()
         if not guild_data["enabled"]:
             return
 
-        if after.channel.id not in guild_data["channels"]:
+        channel_id = payload.channel_id
+        if channel_id not in guild_data["channels"]:
             return
 
-        if after.author.bot and not guild_data["include_bot"]:
+        # Fetch the full message from Discord
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            return
+
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return
+
+        if message.author.bot and not guild_data["include_bot"]:
             return
 
         # Rebuild combined text from the edited message
-        combined_text = after.content
+        combined_text = message.content
         if guild_data["include_embeds"]:
-            for embed in after.embeds:
+            for embed in message.embeds:
                 if embed.description:
                     combined_text += f"\n{embed.description}"
                 if embed.title:
                     combined_text += f"\n{embed.title}"
 
-        item_id = f"discord://{after.guild.id}/{after.channel.id}/{after.id}"
+        item_id = f"discord://{guild.id}/{channel_id}/{message.id}"
         modified = False
         feeds_with_item = set()
 
-        async with self.config.guild(after.guild).feeds() as feeds:
+        log.info(f"MessageToRSS: on_raw_message_edit fired for {item_id} in #{channel.name}")
+
+        async with self.config.guild(guild).feeds() as feeds:
             for feed_name, feed_config in feeds.items():
                 # Check channel binding
                 feed_channels = feed_config.get("channels", [])
-                if feed_channels and after.channel.id not in feed_channels:
+                if feed_channels and channel_id not in feed_channels:
                     continue
 
                 items = feed_config.get("items", [])
                 for item in items:
                     if item["id"] == item_id:
                         item["content"] = combined_text or "(No Text Content)"
-                        item["title"] = f"Message from {after.author} in #{after.channel.name}"
+                        item["title"] = f"Message from {message.author} in #{channel.name}"
                         modified = True
                         feeds_with_item.add(feed_name)
                         break
@@ -273,21 +294,22 @@ class MessageToRSS(commands.Cog):
             if feed_name in feeds_with_item:
                 continue
             feed_channels = feed_config.get("channels", [])
-            if feed_channels and after.channel.id not in feed_channels:
+            if feed_channels and channel_id not in feed_channels:
                 continue
             feed_filters = feed_config.get("filters", [])
-            if self._passes_filters(after, combined_text, feed_filters, global_filters):
-                await self.push_to_feed(after.guild, feed_name, after, combined_text, guild_data)
+            if self._passes_filters(message, combined_text, feed_filters, global_filters):
+                log.info(f"MessageToRSS: Backfilling message {item_id} into feed '{feed_name}'")
+                await self.push_to_feed(guild, feed_name, message, combined_text, guild_data)
                 backfilled = True
 
-        if modified:
+        if modified or backfilled:
             # Re-render all affected feeds
-            updated_guild_data = await self.config.guild(after.guild).all()
+            updated_guild_data = await self.config.guild(guild).all()
             for feed_name, feed_data in updated_guild_data["feeds"].items():
                 feed_channels = feed_data.get("channels", [])
-                if feed_channels and after.channel.id not in feed_channels:
+                if feed_channels and channel_id not in feed_channels:
                     continue
-                await self._render_and_store_feed(after.guild, feed_name, feed_data, feed_data.get("items", []), updated_guild_data)
+                await self._render_and_store_feed(guild, feed_name, feed_data, feed_data.get("items", []), updated_guild_data)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
