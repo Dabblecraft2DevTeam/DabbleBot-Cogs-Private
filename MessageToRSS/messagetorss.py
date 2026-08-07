@@ -219,7 +219,11 @@ class MessageToRSS(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        """Update feed items when a message is edited."""
+        """Update feed items when a message is edited.
+
+        If the message predates the feed (no existing item found), it gets
+        backfilled as a new item on edit.
+        """
         if not after.guild or after.is_system():
             return
 
@@ -244,6 +248,7 @@ class MessageToRSS(commands.Cog):
 
         item_id = f"discord://{after.guild.id}/{after.channel.id}/{after.id}"
         modified = False
+        feeds_with_item = set()
 
         async with self.config.guild(after.guild).feeds() as feeds:
             for feed_name, feed_config in feeds.items():
@@ -258,7 +263,22 @@ class MessageToRSS(commands.Cog):
                         item["content"] = combined_text or "(No Text Content)"
                         item["title"] = f"Message from {after.author} in #{after.channel.name}"
                         modified = True
+                        feeds_with_item.add(feed_name)
                         break
+
+        # For feeds that didn't have the item (message predates feed), backfill it
+        global_filters = guild_data.get("global_filters", [])
+        backfilled = False
+        for feed_name, feed_config in guild_data["feeds"].items():
+            if feed_name in feeds_with_item:
+                continue
+            feed_channels = feed_config.get("channels", [])
+            if feed_channels and after.channel.id not in feed_channels:
+                continue
+            feed_filters = feed_config.get("filters", [])
+            if self._passes_filters(after, combined_text, feed_filters, global_filters):
+                await self.push_to_feed(after.guild, feed_name, after, combined_text, guild_data)
+                backfilled = True
 
         if modified:
             # Re-render all affected feeds
