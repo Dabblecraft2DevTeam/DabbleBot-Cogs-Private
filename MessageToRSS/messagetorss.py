@@ -1,5 +1,6 @@
 import re
 import ssl
+import asyncio
 import aiohttp
 from aiohttp import web
 import discord
@@ -57,6 +58,8 @@ class MessageToRSS(commands.Cog):
         if self._runner is not None:
             await self._runner.cleanup()
             self._runner = None
+            # Give the OS a moment to release the sockets
+            await asyncio.sleep(1)
 
     # Data Privacy
     async def red_delete_data_for_user(self, *, requester: str, user_id: int):
