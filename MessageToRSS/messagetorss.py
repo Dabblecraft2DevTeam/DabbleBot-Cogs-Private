@@ -37,6 +37,7 @@ class MessageToRSS(commands.Cog):
             feed_storage="local",
             remote_urls={},
             max_items=50,
+            emoji_mode="html",
         )
         self.config.register_global(
             http_port=8823,
@@ -281,7 +282,8 @@ class MessageToRSS(commands.Cog):
                 items = feed_config.get("items", [])
                 for item in items:
                     if item["id"] == item_id:
-                        item["content"] = combined_text or "(No Text Content)"
+                        emoji_mode = guild_data.get("emoji_mode", "html")
+                        item["content"] = self._process_emojis(combined_text or "", emoji_mode) or "(No Text Content)"
                         item["title"] = f"Message from {message.author} in #{channel.name}"
                         modified = True
                         feeds_with_item.add(feed_name)
@@ -388,11 +390,44 @@ class MessageToRSS(commands.Cog):
             return False
         return False
 
+    def _process_emojis(self, text: str, emoji_mode: str) -> str:
+        """Convert Discord custom emojis based on the configured mode.
+
+        Modes:
+        - html:  <:name:id> → <img> tag (renders in most RSS readers)
+        - text:  <:name:id> → :name: (human-readable, no images)
+        - raw:   <:name:id> → unchanged
+        """
+        if emoji_mode == "raw":
+            return text
+
+        # Match both animated <a:name:id> and static <:name:id>
+        emoji_pattern = re.compile(r'<(a?):(\w+):(\d+)>')
+
+        if emoji_mode == "html":
+            def replace_emoji(m):
+                animated = m.group(1) == 'a'
+                name = m.group(2)
+                emoji_id = m.group(3)
+                ext = 'gif' if animated else 'png'
+                return f'<img src="https://cdn.discordapp.com/emojis/{emoji_id}.{ext}" alt=":{name}:" style="height:1.5em;width:1.5em;vertical-align:middle">'
+            return emoji_pattern.sub(replace_emoji, text)
+
+        elif emoji_mode == "text":
+            def replace_emoji(m):
+                name = m.group(2)
+                return f':{name}:'
+            return emoji_pattern.sub(replace_emoji, text)
+
+        return text
+
     async def push_to_feed(self, guild, feed_name, message, combined_text, guild_data):
+        emoji_mode = guild_data.get("emoji_mode", "html")
+        processed_text = self._process_emojis(combined_text or "", emoji_mode)
         item_dict = {
             "id": f"discord://{guild.id}/{message.channel.id}/{message.id}",
             "title": f"Message from {message.author} in #{message.channel.name}",
-            "content": combined_text or "(No Text Content)",
+            "content": processed_text or "(No Text Content)",
             "published": message.created_at.replace(tzinfo=timezone.utc).isoformat(),
             "author_name": str(message.author),
             "link": message.jump_url,
@@ -762,6 +797,24 @@ class MessageToRSS(commands.Cog):
         await self.config.guild(ctx.guild).include_embeds.set(enabled)
         await ctx.send(f"Include embeds set to {enabled}.")
 
+    @messagetorss.command(name="setemoji")
+    async def cmd_setemoji(self, ctx: commands.Context, mode: str):
+        """Set how custom emojis are rendered in RSS feeds.
+
+        Modes:
+        - `html`: Emojis as <img> tags (renders inline in most RSS readers)
+        - `text`: Emojis as :name: (human-readable, no images)
+        - `raw`:  Emojis as <:name:id> (Discord raw format, unchanged)
+
+        Usage: `[p]messagetorss setemoji <html|text|raw>`
+        """
+        valid_modes = ["html", "text", "raw"]
+        if mode not in valid_modes:
+            await ctx.send(f"Invalid emoji mode. Must be one of: {', '.join(valid_modes)}")
+            return
+        await self.config.guild(ctx.guild).emoji_mode.set(mode)
+        await ctx.send(f"Emoji mode set to `{mode}`.")
+
     @messagetorss.command(name="setmaxitems")
     async def cmd_setmaxitems(self, ctx: commands.Context, max_items: int):
         """Set max items per feed.
@@ -805,6 +858,7 @@ class MessageToRSS(commands.Cog):
         msg += f"**Max Items:** {data['max_items']}\n"
         msg += f"**Include Bot:** {data['include_bot']}\n"
         msg += f"**Include Embeds:** {data['include_embeds']}\n"
+        msg += f"**Emoji Mode:** {data.get('emoji_mode', 'html')}\n"
         await ctx.send(msg)
 
     @messagetorss.command(name="feedpath")
