@@ -31,6 +31,7 @@ class MessageToRSS(commands.Cog):
             channels=[],
             feeds={},
             global_filters=[],
+            global_removals=[],
             enabled=True,
             include_bot=False,
             include_embeds=True,
@@ -283,7 +284,11 @@ class MessageToRSS(commands.Cog):
                 for item in items:
                     if item["id"] == item_id:
                         emoji_mode = guild_data.get("emoji_mode", "html")
-                        item["content"] = self._process_emojis(combined_text or "", emoji_mode) or "(No Text Content)"
+                        edited_text = self._process_emojis(combined_text or "", emoji_mode)
+                        global_removals = guild_data.get("global_removals", [])
+                        feed_removals = feed_config.get("removals", [])
+                        edited_text = self._apply_removals(edited_text, global_removals + feed_removals)
+                        item["content"] = edited_text or "(No Text Content)"
                         item["title"] = f"Message from {message.author} in #{channel.name}"
                         modified = True
                         feeds_with_item.add(feed_name)
@@ -421,9 +426,44 @@ class MessageToRSS(commands.Cog):
 
         return text
 
+    def _apply_removals(self, text: str, removals: list) -> str:
+        """Remove configured text patterns from message content.
+
+        Each removal is a dict:
+        - type: "text" | "regex"
+        - value: the pattern to remove
+        - case_sensitive: bool (default False, ignored for regex which uses re.IGNORECASE)
+        - replacement: str (default "" — what to replace with)
+        """
+        for r in removals:
+            r_type = r.get("type", "text")
+            r_val = str(r.get("value", ""))
+            case_sens = r.get("case_sensitive", False)
+            replacement = r.get("replacement", "")
+
+            if r_type == "text":
+                if case_sens:
+                    text = text.replace(r_val, replacement)
+                else:
+                    # Case-insensitive replace
+                    pattern = re.compile(re.escape(r_val), re.IGNORECASE)
+                    text = pattern.sub(replacement, text)
+            elif r_type == "regex":
+                flags = 0 if case_sens else re.IGNORECASE
+                try:
+                    text = re.sub(r_val, replacement, text, flags=flags)
+                except re.error:
+                    pass
+
+        return text
+
     async def push_to_feed(self, guild, feed_name, message, combined_text, guild_data):
         emoji_mode = guild_data.get("emoji_mode", "html")
         processed_text = self._process_emojis(combined_text or "", emoji_mode)
+        # Apply text removals (global + per-feed)
+        global_removals = guild_data.get("global_removals", [])
+        feed_removals = guild_data.get("feeds", {}).get(feed_name, {}).get("removals", [])
+        processed_text = self._apply_removals(processed_text, global_removals + feed_removals)
         item_dict = {
             "id": f"discord://{guild.id}/{message.channel.id}/{message.id}",
             "title": f"Message from {message.author} in #{message.channel.name}",
@@ -550,7 +590,8 @@ class MessageToRSS(commands.Cog):
                 "description": description,
                 "filters": [],
                 "items": [],
-                "channels": []
+                "channels": [],
+                "removals": []
             }
         await ctx.send(f"Created feed '{name}'.")
 
@@ -771,6 +812,146 @@ class MessageToRSS(commands.Cog):
                 await ctx.send(f"Removed global filter: {removed['type']} {removed['mode']} '{removed['value']}'")
             else:
                 await ctx.send("Invalid filter index.")
+
+    @messagetorss.command(name="addremoval")
+    async def cmd_addremoval(self, ctx: commands.Context, feed_name: str, removal_type: str, value: str, case_sensitive: bool = False, *, replacement: str = ""):
+        """Add a text removal rule to a feed.
+
+        Removes or replaces matching text from messages before they go into the feed.
+
+        Usage: `[p]messagetorss addremoval <feed_name> <text|regex> <value> [case_sensitive] [replacement]`
+
+        Examples:
+        - `[p]messagetorss addremoval myfeed text "SECRET:" True` — removes "SECRET:" (case-sensitive)
+        - `[p]messagetorss addremoval myfeed text "spoiler"` — removes "spoiler" (case-insensitive)
+        - `[p]messagetorss addremoval myfeed regex "\\[SPOILER\\].*?\\[/SPOILER\\]" False ""` — removes spoiler tags
+        - `[p]messagetorss addremoval myfeed text "DRAFT" True "FINAL"` — replaces DRAFT with FINAL
+        """
+        valid_types = ["text", "regex"]
+
+        if removal_type not in valid_types:
+            await ctx.send(f"Invalid removal type. Must be one of: {', '.join(valid_types)}")
+            return
+
+        if removal_type == "regex":
+            try:
+                re.compile(value)
+            except re.error:
+                await ctx.send("Invalid regex pattern.")
+                return
+
+        async with self.config.guild(ctx.guild).feeds() as feeds:
+            if feed_name not in feeds:
+                await ctx.send(f"Feed '{feed_name}' not found.")
+                return
+
+            feeds[feed_name].setdefault("removals", []).append({
+                "type": removal_type,
+                "value": value,
+                "case_sensitive": case_sensitive,
+                "replacement": replacement
+            })
+        rep_msg = f" replacing with '{replacement}'" if replacement else ""
+        await ctx.send(f"Added {removal_type} removal to '{feed_name}': `{value}`{rep_msg}.")
+
+    @messagetorss.command(name="removeremoval")
+    async def cmd_removeremoval(self, ctx: commands.Context, feed_name: str, removal_index: int):
+        """Remove a text removal rule from a feed by index.
+
+        Usage: `[p]messagetorss removeremoval <feed_name> <index>`
+        Use `[p]messagetorss listremovals <feed_name>` to see removal indices.
+        """
+        async with self.config.guild(ctx.guild).feeds() as feeds:
+            if feed_name not in feeds:
+                await ctx.send(f"Feed '{feed_name}' not found.")
+                return
+
+            removals = feeds[feed_name].get("removals", [])
+            if 0 <= removal_index < len(removals):
+                removed = removals.pop(removal_index)
+                rep = f" -> '{removed['replacement']}'" if removed.get("replacement") else ""
+                await ctx.send(f"Removed rule: {removed['type']} '{removed['value']}'{rep}")
+            else:
+                await ctx.send("Invalid removal index.")
+
+    @messagetorss.command(name="listremovals")
+    async def cmd_listremovals(self, ctx: commands.Context, feed_name: str = None):
+        """List text removal rules for a feed or all feeds.
+
+        Usage: `[p]messagetorss listremovals [feed_name]`
+        """
+        guild_data = await self.config.guild(ctx.guild).all()
+        msg = ""
+
+        if guild_data.get("global_removals"):
+            msg += "**Global Removals:**\n"
+            for i, r in enumerate(guild_data["global_removals"]):
+                rep = f" -> '{r.get('replacement', '')}'" if r.get("replacement") else ""
+                msg += f"{i}: {r['type']} `{r['value']}` (case sensitive: {r.get('case_sensitive', False)}){rep}\n"
+
+        for name, config in guild_data["feeds"].items():
+            if feed_name and name != feed_name:
+                continue
+            removals = config.get("removals", [])
+            if removals:
+                msg += f"\n**Feed '{name}' Removals:**\n"
+                for i, r in enumerate(removals):
+                    rep = f" -> '{r.get('replacement', '')}'" if r.get("replacement") else ""
+                    msg += f"{i}: {r['type']} `{r['value']}` (case sensitive: {r.get('case_sensitive', False)}){rep}\n"
+
+        if not msg.strip():
+            msg = f"Feed '{feed_name}' not found." if feed_name else "No removal rules configured."
+        await ctx.send(msg)
+
+    @messagetorss.command(name="addglobalremoval")
+    async def cmd_addglobalremoval(self, ctx: commands.Context, removal_type: str, value: str, case_sensitive: bool = False, *, replacement: str = ""):
+        """Add a guild-wide text removal rule.
+
+        Applies to all feeds in this guild.
+
+        Usage: `[p]messagetorss addglobalremoval <text|regex> <value> [case_sensitive] [replacement]`
+
+        Examples:
+        - `[p]messagetorss addglobalremoval text "## " True` — removes markdown headers
+        - `[p]messagetorss addglobalremoval regex "@\\w+#\\d+" False "[mention]"` — replaces user mentions
+        """
+        valid_types = ["text", "regex"]
+
+        if removal_type not in valid_types:
+            await ctx.send(f"Invalid removal type. Must be one of: {', '.join(valid_types)}")
+            return
+
+        if removal_type == "regex":
+            try:
+                re.compile(value)
+            except re.error:
+                await ctx.send("Invalid regex pattern.")
+                return
+
+        async with self.config.guild(ctx.guild).global_removals() as removals:
+            removals.append({
+                "type": removal_type,
+                "value": value,
+                "case_sensitive": case_sensitive,
+                "replacement": replacement
+            })
+        rep_msg = f" replacing with '{replacement}'" if replacement else ""
+        await ctx.send(f"Added global {removal_type} removal: `{value}`{rep_msg}.")
+
+    @messagetorss.command(name="removeglobalremoval")
+    async def cmd_removeglobalremoval(self, ctx: commands.Context, removal_index: int):
+        """Remove a guild-wide text removal rule by index.
+
+        Usage: `[p]messagetorss removeglobalremoval <index>`
+        Use `[p]messagetorss listremovals` to see global removal indices.
+        """
+        async with self.config.guild(ctx.guild).global_removals() as removals:
+            if 0 <= removal_index < len(removals):
+                removed = removals.pop(removal_index)
+                rep = f" -> '{removed.get('replacement', '')}'" if removed.get("replacement") else ""
+                await ctx.send(f"Removed global rule: {removed['type']} '{removed['value']}'{rep}")
+            else:
+                await ctx.send("Invalid removal index.")
 
     @messagetorss.command(name="toggle")
     async def cmd_toggle(self, ctx: commands.Context):
