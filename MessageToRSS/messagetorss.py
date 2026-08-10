@@ -41,6 +41,7 @@ class MessageToRSS(commands.Cog):
             emoji_mode="html",
             include_link=True,
             include_published=True,
+            include_title=True,
         )
         self.config.register_global(
             http_port=8823,
@@ -508,7 +509,8 @@ class MessageToRSS(commands.Cog):
         for item in items:
             fe = fg.add_entry()
             fe.id(item["id"])
-            fe.title(item["title"])
+            if guild_data.get("include_title", True):
+                fe.title(item["title"])
             fe.content(item["content"])
             if guild_data.get("include_published", True):
                 fe.published(item["published"])
@@ -1024,6 +1026,18 @@ class MessageToRSS(commands.Cog):
         await self.config.guild(ctx.guild).include_published.set(enabled)
         await ctx.send(f"Include published date set to {enabled}.")
 
+    @messagetorss.command(name="setincludetitle")
+    async def cmd_setincludetitle(self, ctx: commands.Context, enabled: bool):
+        """Set whether to include the message title in RSS feed items.
+
+        When disabled, feed items will not contain a <title> showing
+        "Message from <user> in #<channel>".
+
+        Usage: `[p]messagetorss setincludetitle <True|False>`
+        """
+        await self.config.guild(ctx.guild).include_title.set(enabled)
+        await ctx.send(f"Include title set to {enabled}.")
+
     @messagetorss.command(name="setmaxitems")
     async def cmd_setmaxitems(self, ctx: commands.Context, max_items: int):
         """Set max items per feed.
@@ -1070,6 +1084,7 @@ class MessageToRSS(commands.Cog):
         msg += f"**Emoji Mode:** {data.get('emoji_mode', 'html')}\n"
         msg += f"**Include Link:** {data.get('include_link', True)}\n"
         msg += f"**Include Published:** {data.get('include_published', True)}\n"
+        msg += f"**Include Title:** {data.get('include_title', True)}\n"
         await ctx.send(msg)
 
     @messagetorss.command(name="feedpath")
