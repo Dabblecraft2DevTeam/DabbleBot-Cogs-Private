@@ -40,6 +40,7 @@ class MessageToRSS(commands.Cog):
             max_items=50,
             emoji_mode="html",
             include_link=True,
+            include_published=True,
         )
         self.config.register_global(
             http_port=8823,
@@ -509,7 +510,8 @@ class MessageToRSS(commands.Cog):
             fe.id(item["id"])
             fe.title(item["title"])
             fe.content(item["content"])
-            fe.published(item["published"])
+            if guild_data.get("include_published", True):
+                fe.published(item["published"])
             fe.author(name=item["author_name"])
             if guild_data.get("include_link", True):
                 fe.link(href=item["link"], rel='alternate')
@@ -1010,6 +1012,18 @@ class MessageToRSS(commands.Cog):
         await self.config.guild(ctx.guild).include_link.set(enabled)
         await ctx.send(f"Include link set to {enabled}.")
 
+    @messagetorss.command(name="setincludepublished")
+    async def cmd_setincludepublished(self, ctx: commands.Context, enabled: bool):
+        """Set whether to include the message timestamp in RSS feed items.
+
+        When disabled, feed items will not contain a <pubDate> showing when
+        the original Discord message was posted.
+
+        Usage: `[p]messagetorss setincludepublished <True|False>`
+        """
+        await self.config.guild(ctx.guild).include_published.set(enabled)
+        await ctx.send(f"Include published date set to {enabled}.")
+
     @messagetorss.command(name="setmaxitems")
     async def cmd_setmaxitems(self, ctx: commands.Context, max_items: int):
         """Set max items per feed.
@@ -1055,6 +1069,7 @@ class MessageToRSS(commands.Cog):
         msg += f"**Include Embeds:** {data['include_embeds']}\n"
         msg += f"**Emoji Mode:** {data.get('emoji_mode', 'html')}\n"
         msg += f"**Include Link:** {data.get('include_link', True)}\n"
+        msg += f"**Include Published:** {data.get('include_published', True)}\n"
         await ctx.send(msg)
 
     @messagetorss.command(name="feedpath")
