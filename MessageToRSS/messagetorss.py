@@ -39,6 +39,7 @@ class MessageToRSS(commands.Cog):
             remote_urls={},
             max_items=50,
             emoji_mode="html",
+            include_link=True,
         )
         self.config.register_global(
             http_port=8823,
@@ -510,7 +511,8 @@ class MessageToRSS(commands.Cog):
             fe.content(item["content"])
             fe.published(item["published"])
             fe.author(name=item["author_name"])
-            fe.link(href=item["link"], rel='alternate')
+            if guild_data.get("include_link", True):
+                fe.link(href=item["link"], rel='alternate')
 
         try:
             xml_content = fg.rss_str(pretty=True)
@@ -996,6 +998,18 @@ class MessageToRSS(commands.Cog):
         await self.config.guild(ctx.guild).emoji_mode.set(mode)
         await ctx.send(f"Emoji mode set to `{mode}`.")
 
+    @messagetorss.command(name="setincludelink")
+    async def cmd_setincludelink(self, ctx: commands.Context, enabled: bool):
+        """Set whether to include the Discord message link in RSS feed items.
+
+        When disabled, feed items will not contain a <link> pointing to the
+        original Discord message.
+
+        Usage: `[p]messagetorss setincludelink <True|False>`
+        """
+        await self.config.guild(ctx.guild).include_link.set(enabled)
+        await ctx.send(f"Include link set to {enabled}.")
+
     @messagetorss.command(name="setmaxitems")
     async def cmd_setmaxitems(self, ctx: commands.Context, max_items: int):
         """Set max items per feed.
@@ -1040,6 +1054,7 @@ class MessageToRSS(commands.Cog):
         msg += f"**Include Bot:** {data['include_bot']}\n"
         msg += f"**Include Embeds:** {data['include_embeds']}\n"
         msg += f"**Emoji Mode:** {data.get('emoji_mode', 'html')}\n"
+        msg += f"**Include Link:** {data.get('include_link', True)}\n"
         await ctx.send(msg)
 
     @messagetorss.command(name="feedpath")
