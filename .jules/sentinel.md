@@ -35,3 +35,7 @@
 **Vulnerability:** The NameUpdate cog used instance variables to store guild-specific state, leading to cross-guild state contamination (IDOR).
 **Learning:** Instance variables in a Cog are shared across all guilds the bot is in.
 **Prevention:** Always use `Config.guild(guild)` to store state that is specific to a guild.
+## 2026-08-02 - Credential Exposure in Command Arguments
+**Vulnerability:** The `levelerdb setup` command accepted sensitive MySQL credentials (including passwords) as plaintext command arguments without restricting execution to Direct Messages (DMs). If run in a public channel, credentials would be exposed to all server members.
+**Learning:** Commands that accept sensitive configuration parameters (like passwords or API keys) must be restricted from executing in public server channels where message history is visible.
+**Prevention:** When Discord bot commands accept sensitive credentials, explicitly enforce execution in Direct Messages (e.g., `if ctx.guild: return`) and attempt to delete the invoking message (`await ctx.message.delete()`) to prevent credential exposure in server histories.
