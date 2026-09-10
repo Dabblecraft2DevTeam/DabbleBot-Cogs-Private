@@ -91,7 +91,7 @@ class NBZHCRank(commands.Cog):
         """This cog does not store any user data."""
         return
 
-    @commands.command()
+    @commands.hybrid_command()
     @commands.is_owner()
     async def rankset(self, ctx: commands.Context):
         """Configure the MySQL Database credentials for the Rank cog.
@@ -136,7 +136,7 @@ class NBZHCRank(commands.Cog):
         )
         return conn
 
-    @commands.command()
+    @commands.hybrid_command()
     async def rank(self, ctx: commands.Context, *, playername: str):
         """Fetch and display rank statistics for a specific player."""
         
