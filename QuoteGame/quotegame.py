@@ -69,7 +69,8 @@ class QuoteGame(commands.Cog):
             "current_winners": [],
             "min_submissions": 1,
             "ping_role_id": 1008940890678636544,
-            "winner_role_id": 1484535497651916872
+            "winner_role_id": 1484535497651916872,
+            "xp_reward": 500
         }
         self.config.register_guild(**default_guild)
         self.loop_task = bot.loop.create_task(self.game_loop())
@@ -229,6 +230,14 @@ class QuoteGame(commands.Cog):
             return await ctx.send("Minimum submissions must be at least 1.")
         await self.config.guild(ctx.guild).min_submissions.set(amount)
         await ctx.send(f"Minimum submissions set to {amount}.")
+
+    @quotegame.command()
+    async def setxpreward(self, ctx, amount: int):
+        """Set the XP reward amount for quote game winners."""
+        if amount < 0:
+            return await ctx.send("XP reward cannot be negative. Set to 0 to disable XP rewards.")
+        await self.config.guild(ctx.guild).xp_reward.set(amount)
+        await ctx.send(f"XP reward for quote game winners set to {amount}.")
 
     async def fetch_quote(self):
         # Always pick from our historical quotes list
@@ -566,6 +575,23 @@ class QuoteGame(commands.Cog):
                                     except discord.Forbidden:
                                         pass
                         await self.config.guild(guild).current_winners.set(new_winners)
+                        
+                        # Award XP to winners via Leveler cog
+                        xp_reward = await self.config.guild(guild).xp_reward()
+                        xp_awarded = False
+                        if xp_reward > 0 and new_winners:
+                            leveler = self.bot.get_cog("Leveler")
+                            if leveler and hasattr(leveler, 'api') and leveler.api:
+                                for uid in new_winners:
+                                    try:
+                                        new_xp, new_level = await leveler.api.add_user_xp(guild.id, int(uid), xp_reward)
+                                    except Exception as e:
+                                        import logging
+                                        logging.getLogger("red.quotegame").error(f"Error awarding XP to {uid}", exc_info=e)
+                                xp_awarded = True
+                        
+                        if xp_awarded:
+                            winner_text += f"\n\n🎉 **+{xp_reward} XP** has been awarded to the winner(s)! 🎉"
                         
                 full_quote = game_data.get('quote', "")
                 author = game_data.get('author', "")
