@@ -60,7 +60,7 @@ class QuoteGame(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=8472948375)
+        self.config = Config.get_conf(self, identifier=24582935728345)
         default_guild = {
             "channel_id": None,
             "is_active": False,
@@ -73,17 +73,16 @@ class QuoteGame(commands.Cog):
             "xp_reward": 500
         }
         self.config.register_guild(**default_guild)
-        # Bag shuffle system for quotes — shared across all guilds
-        self._quote_bag = []
-        self._bag_index = 0
-        self._refill_bag()
+        # Bag shuffle system for quotes — persisted in global config
+        self.config.register_global(quote_bag=[], bag_index=0)
         self.loop_task = bot.loop.create_task(self.game_loop())
 
-    def _refill_bag(self):
-        """Shuffle all quotes into a new bag."""
-        self._quote_bag = list(range(len(HISTORICAL_QUOTES)))
-        random.shuffle(self._quote_bag)
-        self._bag_index = 0
+    async def _refill_bag(self):
+        """Shuffle all quotes into a new bag and save to config."""
+        new_bag = list(range(len(HISTORICAL_QUOTES)))
+        random.shuffle(new_bag)
+        await self.config.quote_bag.set(new_bag)
+        await self.config.bag_index.set(0)
 
     def cog_unload(self):
         if self.loop_task:
@@ -251,11 +250,18 @@ class QuoteGame(commands.Cog):
 
     async def fetch_quote(self):
         # Bag shuffle: draw the next quote from the shuffled bag.
-        # When the bag is empty, reshuffle and start over.
-        if self._bag_index >= len(self._quote_bag):
-            self._refill_bag()
-        quote_idx = self._quote_bag[self._bag_index]
-        self._bag_index += 1
+        # When the bag is empty or index invalid, reshuffle.
+        bag = await self.config.quote_bag()
+        index = await self.config.bag_index()
+
+        if not bag or index >= len(bag):
+            await self._refill_bag()
+            bag = await self.config.quote_bag()
+            index = await self.config.bag_index()
+            
+        quote_idx = bag[index]
+        await self.config.bag_index.set(index + 1)
+        
         entry = HISTORICAL_QUOTES[quote_idx]
         return entry["quote"], entry["author"]
 
