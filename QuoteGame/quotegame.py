@@ -60,7 +60,7 @@ class QuoteGame(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=24582935728345)
+        self.config = Config.get_conf(self, identifier=8472948375)
         default_guild = {
             "channel_id": None,
             "is_active": False,
