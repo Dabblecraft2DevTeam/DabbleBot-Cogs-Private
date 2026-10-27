@@ -457,8 +457,14 @@ class QuoteGame(commands.Cog):
             await self.config.guild(guild).current_game.set({})
             return
             
-        unique_answers = list(set(answers.values()))
-        if real_word not in unique_answers:
+        unique_answers = []
+        seen = set()
+        for ans in answers.values():
+            lower = ans.lower()
+            if lower not in seen:
+                seen.add(lower)
+                unique_answers.append(ans)
+        if real_word.lower() not in [a.lower() for a in unique_answers]:
             unique_answers.append(real_word)
             
         random.shuffle(unique_answers)
