@@ -73,7 +73,17 @@ class QuoteGame(commands.Cog):
             "xp_reward": 500
         }
         self.config.register_guild(**default_guild)
+        # Bag shuffle system for quotes — shared across all guilds
+        self._quote_bag = []
+        self._bag_index = 0
+        self._refill_bag()
         self.loop_task = bot.loop.create_task(self.game_loop())
+
+    def _refill_bag(self):
+        """Shuffle all quotes into a new bag."""
+        self._quote_bag = list(range(len(HISTORICAL_QUOTES)))
+        random.shuffle(self._quote_bag)
+        self._bag_index = 0
 
     def cog_unload(self):
         if self.loop_task:
@@ -240,8 +250,14 @@ class QuoteGame(commands.Cog):
         await ctx.send(f"XP reward for quote game winners set to {amount}.")
 
     async def fetch_quote(self):
-        # Always pick from our historical quotes list
-        return random.choice(HISTORICAL_QUOTES)
+        # Bag shuffle: draw the next quote from the shuffled bag.
+        # When the bag is empty, reshuffle and start over.
+        if self._bag_index >= len(self._quote_bag):
+            self._refill_bag()
+        quote_idx = self._quote_bag[self._bag_index]
+        self._bag_index += 1
+        entry = HISTORICAL_QUOTES[quote_idx]
+        return entry["quote"], entry["author"]
 
     def blank_out_word(self, quote):
         # Find words that are >= 4 letters
