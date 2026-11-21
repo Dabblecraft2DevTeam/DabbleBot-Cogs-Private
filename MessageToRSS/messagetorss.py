@@ -161,30 +161,32 @@ class MessageToRSS(commands.Cog):
                 https_enabled = False
 
             if https_enabled:
-                for p in range(https_port, https_port + 3):
-                    try:
-                        site = web.TCPSite(self._runner, host, p, ssl_context=ssl_context)
-                        await site.start()
-                        await self.config.actual_port.set(p)
-                        log.info(f"MessageToRSS HTTPS server started on {host}:{p}")
-                        return
-                    except OSError:
-                        log.warning(f"Port {p} in use, trying next...")
-
-                log.error("Failed to start MessageToRSS HTTPS server, ports in use. Falling back to HTTP.")
+                try:
+                    site = web.TCPSite(self._runner, host, https_port, ssl_context=ssl_context)
+                    await site.start()
+                    await self.config.actual_port.set(https_port)
+                    log.info(f"MessageToRSS HTTPS server started on {host}:{https_port}")
+                    return
+                except OSError:
+                    log.error(f"Failed to start MessageToRSS HTTPS server: port {https_port} in use.")
+                    if self._runner is not None:
+                        await self._runner.cleanup()
+                        self._runner = None
+                    return
 
         # Fallback: Start HTTP server on configured port
-        for p in range(base_port, base_port + 3):
-            try:
-                site = web.TCPSite(self._runner, host, p)
-                await site.start()
-                await self.config.actual_port.set(p)
-                log.info(f"MessageToRSS HTTP server started on {host}:{p}")
-                return
-            except OSError:
-                log.warning(f"Port {p} in use, trying next...")
-
-        log.error("Failed to start MessageToRSS HTTP server, ports in use.")
+        try:
+            site = web.TCPSite(self._runner, host, base_port)
+            await site.start()
+            await self.config.actual_port.set(base_port)
+            log.info(f"MessageToRSS HTTP server started on {host}:{base_port}")
+            return
+        except OSError:
+            log.error(f"Failed to start MessageToRSS HTTP server: port {base_port} in use.")
+            if self._runner is not None:
+                await self._runner.cleanup()
+                self._runner = None
+            return
 
     # Event Listener
     @commands.Cog.listener()
@@ -1117,17 +1119,46 @@ class MessageToRSS(commands.Cog):
     @messagetorss.command(name="setport")
     @commands.is_owner()
     async def cmd_setport(self, ctx: commands.Context, port: int):
-        """Change the HTTP server port (restarts server).
+        """Change the fallback HTTP server port (restarts server).
 
         Usage: `[p]messagetorss setport <port>`
         Bot owner only — this is a global setting.
+        Note: This changes the fallback HTTP port. For HTTPS, use `[p]messagetorss sethttpsport <port>`.
         """
+        if not (1 <= port <= 65535):
+            await ctx.send("Port must be between 1 and 65535.")
+            return
+
         await self.config.http_port.set(port)
         if self._runner is not None:
             await self._runner.cleanup()
             self._runner = None
         self.bot.loop.create_task(self._start_http_server())
-        await ctx.send(f"HTTP server restarting on base port {port}...")
+        log.info(f"MessageToRSS: Fallback HTTP port set to {port} (use sethttpsport for HTTPS listener).")
+        await ctx.send(
+            f"Fallback HTTP server port set to {port}. Restarting server...\n"
+            f"*Note: This changes the fallback HTTP port. Use `[p]messagetorss sethttpsport` for the HTTPS listener.*"
+        )
+
+    @messagetorss.command(name="sethttpsport")
+    @commands.is_owner()
+    async def cmd_sethttpsport(self, ctx: commands.Context, port: int):
+        """Change the HTTPS server port (restarts server).
+
+        Usage: `[p]messagetorss sethttpsport <port>`
+        Bot owner only — this is a global setting.
+        """
+        if not (1 <= port <= 65535):
+            await ctx.send("Port must be between 1 and 65535.")
+            return
+
+        await self.config.https_port.set(port)
+        if self._runner is not None:
+            await self._runner.cleanup()
+            self._runner = None
+        self.bot.loop.create_task(self._start_http_server())
+        log.info(f"MessageToRSS: HTTPS server port set to {port}.")
+        await ctx.send(f"HTTPS server port set to {port}. Restarting server...")
 
     @messagetorss.command(name="serverstatus")
     async def cmd_serverstatus(self, ctx: commands.Context):
