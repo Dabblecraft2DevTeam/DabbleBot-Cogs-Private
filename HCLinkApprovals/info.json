@@ -1,0 +1,20 @@
+{
+    "author": [
+        "Naval Battlezone Staff"
+    ],
+    "name": "HCLinkApprovals",
+    "short": "Staff review and approval workflow for HC Account Migration.",
+    "description": "Discord cog for DabbleBot that surfaces pending Minecraft account migration sessions for staff review, provides advisory verification data, and handles Approve/Reject button interactions with HMAC security.",
+    "min_bot_version": "3.5.0",
+    "tags": [
+        "migration",
+        "staff",
+        "verification",
+        "hclink",
+        "mc"
+    ],
+    "requirements": [
+        "aiohttp"
+    ],
+    "end_user_data_statement": "This cog does not persistently store any personal user data. It only stores Discord message IDs mapped to migration session tokens for workflow tracking."
+}
