@@ -43,12 +43,12 @@ def _build_blocks() -> list:
         tse.SubstringBlock(),
         tse.EmbedBlock(),
         tse.ReplaceBlock(),
-        tse.PythonBlock(),
+        # Note: tse.PythonBlock() removed for RCE prevention
         tse.RequireBlock(),
         tse.BlacklistBlock(),
         tse.URLEncodeBlock(),
-        tse.CommandBlock(),
-        tse.RedirectBlock(),
+        tse.CommandBlock(),  # Note: Keep for now, but should be monitored
+        # Note: tse.RedirectBlock() removed for SSRF prevention
         tse.OverrideBlock(),
         tse.CooldownBlock(),
     ]

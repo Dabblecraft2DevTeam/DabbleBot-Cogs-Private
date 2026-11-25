@@ -572,4 +572,8 @@ class CommandsMixin:
         await self.config.mysql_password.set(password)
         await self.config.mysql_db.set(db)
         await self.config.mysql_port.set(port)
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
         await ctx.send("MySQL configuration saved. Please reload the cog to apply.")

@@ -1,9 +1,49 @@
 import io
 import os
 import urllib.request
+from urllib.parse import urlparse
+import socket
+import ipaddress
+import logging
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
+
+log = logging.getLogger("red.dabblecogs.leveler.image_gen")
+
+PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+def is_safe_image_url(url: str) -> bool:
+    """Validate that a URL does not point to private/internal IP addresses or localhost."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        if hostname.lower() in ("localhost", "localhost.localdomain"):
+            return False
+        addr_infos = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, sockaddr in addr_infos:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+            for net in PRIVATE_NETWORKS:
+                if ip in net:
+                    return False
+        return True
+    except Exception:
+        return False
 
 # Setup a ThreadPoolExecutor for blocking image operations
 executor = ThreadPoolExecutor(max_workers=4)
@@ -42,17 +82,20 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
     
     if background_id and background_id != "default":
         if background_id.startswith("http"):
-            try:
-                req = urllib.request.Request(background_id, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    bg = Image.open(io.BytesIO(resp.read())).convert("RGBA")
-                bg = bg.resize((width, height))
-                img.paste(bg, (0,0))
-                # Add overlay
-                overlay = Image.new("RGBA", (width, height), (0, 0, 0, 150))
-                img = Image.alpha_composite(img, overlay)
-            except Exception:
-                pass
+            if not is_safe_image_url(background_id):
+                log.warning(f"Blocked SSRF attempt for background URL: {background_id}")
+            else:
+                try:
+                    req = urllib.request.Request(background_id, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        bg = Image.open(io.BytesIO(resp.read())).convert("RGBA")
+                    bg = bg.resize((width, height))
+                    img.paste(bg, (0,0))
+                    # Add overlay
+                    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 150))
+                    img = Image.alpha_composite(img, overlay)
+                except Exception:
+                    pass
                 
     draw = ImageDraw.Draw(img)
 
@@ -121,9 +164,12 @@ def generate_profile_card_sync(username: str, avatar_bytes: bytes, xp: int, leve
     current_y = 230
     for url in prestige_urls:
         if not url.startswith("http"): continue
+        clean_url = url.strip("<>}{")
+        clean_url = clean_url.replace("%7D", "")
+        if not is_safe_image_url(clean_url):
+            log.warning(f"Blocked SSRF attempt for prestige badge URL: {clean_url}")
+            continue
         try:
-            clean_url = url.strip("<>}{")
-            clean_url = clean_url.replace("%7D", "")
             req = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=3) as resp:
                 badge = Image.open(io.BytesIO(resp.read())).convert("RGBA")

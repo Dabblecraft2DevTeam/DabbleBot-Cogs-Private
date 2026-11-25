@@ -1,3 +1,4 @@
+import html
 import re
 import ssl
 import asyncio
@@ -104,6 +105,10 @@ class MessageToRSS(commands.Cog):
         feed_name = request.match_info.get("feed_name", "")
         if not feed_name:
             return web.Response(status=404, text="Not Found")
+        if ".." in feed_name or "/" in feed_name or "\\" in feed_name or "\0" in feed_name:
+            return web.Response(status=403, text="Forbidden")
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", feed_name):
+            return web.Response(status=403, text="Forbidden")
 
         feed_file = cog_data_path(self) / "feeds" / f"{feed_name}.xml"
         if not feed_file.exists():
@@ -117,13 +122,19 @@ class MessageToRSS(commands.Cog):
         if feed_dir.exists():
             for f in feed_dir.iterdir():
                 if f.name.endswith(".xml"):
-                    feeds.append(f.name[:-4])
+                    feed_name = f.name[:-4]
+                    if ".." in feed_name or "/" in feed_name or "\\" in feed_name or "\0" in feed_name:
+                        continue
+                    if not re.match(r"^[a-zA-Z0-9_\-]+$", feed_name):
+                        continue
+                    feeds.append(feed_name)
 
-        html = "<html><body><h1>Available Feeds</h1><ul>"
+        index_html = "<html><body><h1>Available Feeds</h1><ul>"
         for f in feeds:
-            html += f'<li><a href="/feeds/{f}">{f}</a></li>'
-        html += "</ul></body></html>"
-        return web.Response(text=html, content_type="text/html")
+            escaped_f = html.escape(f)
+            index_html += f'<li><a href="/feeds/{escaped_f}">{escaped_f}</a></li>'
+        index_html += "</ul></body></html>"
+        return web.Response(text=index_html, content_type="text/html")
 
     async def _handle_health(self, request):
         return web.json_response({"status": "ok"})
