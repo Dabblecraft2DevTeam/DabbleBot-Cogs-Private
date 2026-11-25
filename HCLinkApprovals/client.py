@@ -69,7 +69,7 @@ class HCLinkClient:
 
     def __init__(
         self,
-        base_url: str = "https://migrate.navalbattlezone.com:9443",
+        base_url: str = "https://example.com",
         shared_secret: str = "",
         timeout_seconds: float = 10.0,
         session: Optional[aiohttp.ClientSession] = None,

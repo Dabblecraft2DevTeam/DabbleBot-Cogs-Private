@@ -1,6 +1,6 @@
 # HCLinkApprovals — Red-DiscordBot Cog (Phase 3)
 
-The official Discord staff review cog for the **HC Account Migration System** on Naval Battlezone (`migrate.navalbattlezone.com:9443`).
+The official Discord staff review cog for the **HC Account Migration System** on Naval Battlezone.
 
 This cog runs inside the existing **DabbleBot** Red-DiscordBot (v3.5+) instance. When a player cannot confirm their old Minecraft account in-game (entering the `staff_review` state), this cog surfaces their request in a designated staff channel, presents advisory verification data, and allows authorized staff to inspect player ships and Approve or Reject the migration via interactive Discord UI buttons.
 
@@ -9,7 +9,7 @@ This cog runs inside the existing **DabbleBot** Red-DiscordBot (v3.5+) instance.
 ## Architecture & Design
 
 - **Framework**: Red-DiscordBot 3.5.24+, `discord.py` 2.7.1+, `aiohttp`.
-- **Target Backend**: Migration API running at `https://migrate.navalbattlezone.com:9443`.
+- **Target Backend**: Migration API (URL configured via `[p]hclinkset backend`).
 - **Authentication**: HMAC-SHA256 request signatures with timestamp replay protection (`X-HCLink-Signature` / `X-HCLink-Timestamp` & `X-HC-*`).
 - **Data Persistence**: `redbot.core.Config` stores backend settings and a `message_id <-> session_token` mapping to prevent duplicate posts and track state transitions.
 - **DabbleBot Convention**: This cog is strictly committed to the repository and loaded from there. **Never edit files directly on the live bot.**
@@ -34,7 +34,7 @@ Run the admin configuration commands:
 
 ```
 # 1. Set backend base URL
-[p]hclinkset backend https://migrate.navalbattlezone.com:9443
+[p]hclinkset backend https://your-migration-backend.example.com
 
 # 2. Set HMAC shared secret (prompts via DM so secret is never exposed in chat)
 [p]hclinkset secret

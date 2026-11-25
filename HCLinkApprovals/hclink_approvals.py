@@ -37,7 +37,7 @@ class HCLinkApprovals(commands.Cog):
         )
 
         default_global: Dict[str, Any] = {
-            "backend_url": "https://migrate.navalbattlezone.com:9443",
+            "backend_url": "https://example.com",
             "shared_secret": "",
             "channel_id": None,
             "staff_role_id": None,
