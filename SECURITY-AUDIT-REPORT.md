@@ -230,22 +230,13 @@ While not secrets per se, the following internal infrastructure details are expo
 - **Description:** Column names are interpolated into the SQL query string via f-string. However, they are validated against a hardcoded allowlist (`background_id`, `title_color`, `bar_color`, `bio`, `prestige`) before interpolation, so this is NOT currently exploitable. This is flagged as medium because the pattern is fragile — if the allowlist check is accidentally removed or bypassed in future code changes, it becomes SQL injection.
 - **Remediation:** Add a comment explaining the safety guarantee. Consider using a mapping dict instead of string interpolation for extra safety.
 
-### M6: HCLinkApprovals — Session Token in URL Path
-- **Severity:** MEDIUM
+### M6: HCLinkApprovals — Session Token in URL Path (ACCEPTED DESIGN)
+
+- **Severity:** N/A (accepted design, not a vulnerability)
 - **Cog:** HCLinkApprovals
-- **File:** `client.py`, lines 179, 186, 206, 218
-- **Code:**
-  ```python
-  result = await self._request("GET", f"/api/staff/{token}/detail")
-  return await self._request("POST", f"/api/staff/{token}/approve", json_data=payload)
-  ```
-- **Description:** Session tokens are passed in URL paths, which means they may appear in:
-  - Backend access logs
-  - Proxy/CDN logs
-  - Browser history (if the URL is ever rendered)
-  - Error messages and stack traces
-  The token is also used in Discord button `custom_id` values (`hclink_approve:{session_token}`), which are visible in Discord's API and to users who inspect the message.
-- **Remediation:** Consider passing tokens in headers or request bodies instead of URL paths. For Discord button custom_ids, use a short hash or reference ID instead of the full token.
+- **File:** `client.py`, lines 179, 186, 206, 218; `views.py`, lines 187, 197, 207
+- **Description:** Session tokens are passed in URL paths and Discord button `custom_id` values. After the V2/V4 patches (HMAC required on `/execute`, `/old-choice`, and all staff endpoints), the token alone provides only read-only access to the player's own migration page (`/link/{token}` and `/api/session/{token}/state` returns only `status`, `can_execute`, `error_message`). All dangerous operations require the HMAC shared secret. The token is the player's handle to their own session by design — seeing your own token is how the system works, not a leak.
+- **Status:** Accepted. No fix required. A future hardening pass (short reference IDs + internal mapping) could reduce token exposure in logs, but the current design is safe given HMAC gating on all write paths.
 
 ---
 
@@ -333,7 +324,7 @@ While not secrets per se, the following internal infrastructure details are expo
 |-----|---------|-----------|
 | **MessageToRSS** | ⚠️ NEEDS WORK | Unauthenticated public web server (C2), path traversal (H5), XSS in index (M2), SSRF via remote URLs (M3), no input validation (M1) |
 | **DabbleTags** | ⚠️ NEEDS WORK | PythonBlock enables RCE (C1), CommandBlock/RedirectBlock SSRF (H2) |
-| **HCLinkApprovals** | ✅ GOOD | HMAC auth done well (I4), but backend URL exposed (H3), token in URLs (M6) |
+| **HCLinkApprovals** | ✅ GOOD | HMAC auth done well (I4), backend URL hardcoded (H3, ~~token in URLs — accepted design~~) |
 | **Leveler** | ⚠️ ADEQUATE | SSRF via image URLs (H1), MySQL password in plaintext command (H4), fragile SQL pattern (M5) |
 | **NBZHCRank** | ✅ EXCELLENT | Parameterized queries, input validation regex, owner-only config, proper error handling |
 | **QuoteGame** | ✅ GOOD | Hardcoded role IDs (L2), user data persistence noted |
@@ -358,9 +349,9 @@ While not secrets per se, the following internal infrastructure details are expo
 3. **HIGH:** Fix MessageToRSS path traversal with feed name validation (H5)
 4. **HIGH:** Add SSRF protections to Leveler image URL fetching (H1)
 5. **HIGH:** Move MySQL credential setup to DM flow in Leveler (H4)
-6. **HIGH:** Remove hardcoded backend URL from HCLinkApprovals defaults/README (H3)
-7. **HIGH:** Remove `RedirectBlock` from DabbleTags (H2)
-8. **MEDIUM:** Fix XSS in MessageToRSS feed index (M2)
+6. **HIGH:** Remove hardcoded backend URL from HCLinkApprovals defaults/README (H3) — ✅ DONE
+7. **HIGH:** Remove `RedirectBlock` from DabbleTags (H2) — ✅ DONE
+8. **MEDIUM:** Fix XSS in MessageToRSS feed index (M2) — ✅ DONE
 9. **MEDIUM:** Add input validation for feed names (M1)
 10. **MEDIUM:** Validate remote storage URLs in MessageToRSS (M3)
 11. **LOW:** Install gitleaks pre-commit hook (I1)
